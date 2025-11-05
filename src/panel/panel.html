@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'">
+  <link rel="stylesheet" href="panel.css">
+  <title>Companion</title>
+</head>
+<body>
+  <header>
+    <h1>Companion</h1>
+    <small id="status">ready</small>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="tutor" class="active">Tutor</button>
+    <button data-tab="notes">Notes</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
+  <section id="tutor" class="tab active">
+    <div id="contextPreview"></div>
+    <div class="actions">
+      <button id="btnExplain">Explain tests</button>
+      <button id="btnNudge">Nudge me</button>
+      <button id="btnConcept">Concept check</button>
+    </div>
+    <div id="answer" class="box"></div>
+    <footer id="tokenBar">Session: 0 • Today: 0</footer>
+  </section>
+
+  <section id="notes" class="tab">
+    <div class="note-quick">
+      <textarea id="noteBody" placeholder="What did you just learn?"></textarea>
+      <div class="row">
+        <input id="noteTags" placeholder="#flexbox #a11y">
+        <button id="saveNote">Save</button>
+      </div>
+    </div>
+    <input id="noteSearch" placeholder="Search notes">
+    <ul id="noteList"></ul>
+    <button id="exportMd">Export selected → Markdown</button>
+  </section>
+
+  <section id="settings" class="tab">
+    <label>OpenAI API Key <input id="apiKey" type="password" placeholder="sk-..."></label>
+    <label>Model
+      <input id="model" value="gpt-4o-mini">
+    </label>
+    <label>Hint Mode
+      <select id="hintMode">
+        <option value="strict" selected>Strict hints (no code)</option>
+        <option value="expanded">Hints + tiny snippets</option>
+      </select>
+    </label>
+    <button id="savePrefs">Save Settings</button>
+    <p class="muted">Notes & token counts stay on your device.</p>
+  </section>
+
+  <script src="../lib/storage.js"></script>
+  <script src="../lib/tokens.js"></script>
+  <script src="../lib/rateLimit.js"></script>
+  <script src="../lib/context.js"></script>
+  <script src="../lib/tutor.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
+

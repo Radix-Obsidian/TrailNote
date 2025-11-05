@@ -1,0 +1,13 @@
+body { font: 14px/1.4 system-ui, sans-serif; margin: 0; }
+header { padding: 8px 12px; border-bottom: 1px solid #eee; display:flex; justify-content:space-between; align-items:center;}
+.tabs { display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid #eee;}
+.tabs button.active { font-weight: 700; }
+.tab { display:none; padding:12px; }
+.tab.active { display:block; }
+.box { background:#fafafa; border:1px solid #eee; padding:8px; margin-top:8px; border-radius:6px; white-space:pre-wrap; }
+.note-quick textarea { width:100%; height:80px; }
+.row { display:flex; gap:8px; margin-top:6px; }
+#noteList { list-style:none; padding:0; margin:12px 0; max-height:280px; overflow:auto; }
+#tokenBar { margin-top:10px; color:#555; font-size:12px; }
+.muted { color:#777; font-size:12px; }
+

@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Agentic freeCodeCamp Companion",
+  "version": "0.1.0",
+  "description": "AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.",
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.freecodecamp.org/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.freecodecamp.org/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "src/panel/panel.html"
+  },
+  "action": {
+    "default_title": "Open Companion"
+  }
+}
+
