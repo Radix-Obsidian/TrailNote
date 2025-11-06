@@ -4,6 +4,37 @@
 import { store } from "./storage.js";
 import { tokens } from "./tokens.js";
 
+// Import modules dynamically for browser environment
+let guardrailSystem;
+let outcomeTracker;
+let abTesting;
+
+if (typeof window !== 'undefined') {
+  // Import guardrail system
+  import('./guardrail.js').then(module => {
+    guardrailSystem = module.default;
+    console.log('[HintHopper] Guardrail system loaded');
+  }).catch(err => {
+    console.error('[HintHopper] Failed to load guardrail system:', err);
+  });
+  
+  // Import outcome tracker
+  import('./outcome-tracker.js').then(module => {
+    outcomeTracker = module.default;
+    console.log('[HintHopper] Outcome tracker loaded');
+  }).catch(err => {
+    console.error('[HintHopper] Failed to load outcome tracker:', err);
+  });
+  
+  // Import A/B testing framework
+  import('./ab-testing.js').then(module => {
+    abTesting = module.default;
+    console.log('[HintHopper] A/B testing framework loaded');
+  }).catch(err => {
+    console.error('[HintHopper] Failed to load A/B testing framework:', err);
+  });
+}
+
 const DEFAULT_MODEL = "gpt-4o-mini";
 const SUPPORTED_MODELS = new Set([
   "gpt-4o-mini",
@@ -24,7 +55,7 @@ const GROQ_MODELS = new Set([
 const IGNORABLE_RUNTIME_ERRORS = /(Extension context invalidated|Receiving end does not exist)/i;
 
 const SYS_BASE = `
-You are TrailNote, a gentle coding tutor for freeCodeCamp beginners.
+You are Bunji, an energetic and friendly coding tutor for HintHopper, helping freeCodeCamp beginners "hop to the right idea".
 Rules:
 - Hints, not solutions. Never output full task code.
 - Keep responses short and structured.
@@ -57,8 +88,20 @@ function sanitizeStrict(text, strict) {
   return cleaned;
 }
 
-function sanitizeStructuredResponse(obj, strict) {
+async function sanitizeStructuredResponse(obj, strict, context) {
   if (!obj || typeof obj !== "object") return obj;
+  
+  // Use the guardrail system if available, otherwise fall back to simple sanitization
+  if (guardrailSystem) {
+    try {
+      return await guardrailSystem.sanitizeResponse(obj, context);
+    } catch (error) {
+      console.warn('[HintHopper] Guardrail system error:', error);
+      // Fall back to simple sanitization if guardrail fails
+    }
+  }
+  
+  // Simple sanitization as fallback
   const clone = { ...obj };
   if (Array.isArray(clone.steps)) {
     clone.steps = clone.steps.map(step => sanitizeStrict(step, strict));
@@ -75,18 +118,22 @@ function buildSystemPrompt(tone) {
   return `${SYS_BASE}\nTone: ${MODE_TONE[toneKey]}`;
 }
 
-function makeUserPrompt(mode, ctx, ruleHints, tone) {
-  const tests = (ctx?.tests || []).slice(0, 4).map(t => `- ${t}`).join("\n");
-  const instruction = ctx?.instruction ? `Instruction:\n${ctx.instruction}\n` : "";
-  const ruleTip = ruleHints ? `\nKnown rule signal:\n${ruleHints}\n` : "";
-  const codeExcerpt = ctx?.code_excerpt || ctx?.userCode?.slice(0, 400) || "";
-  const task =
-    mode === "explain" ? "Explain the failing tests and suggest up to 3 steps." :
-    mode === "nudge" ? "Ask a guiding question implicitly and suggest 1-2 steps." :
-    mode === "concept" ? "Name the core concept and a mini-checklist." :
-    "Offer supportive guidance.";
-
-  const toneAside = tone === "exam"
+function makeUserPrompt(mode, context, ruleHints, toneSetting) {
+  const { userQuery, enhancedQuery, userCode, tests, failingTests } = context;
+  
+  // Use enhanced query if available, otherwise fall back to original query
+  const queryToUse = enhancedQuery || userQuery;
+  
+  const codeSection = userCode ? `\n\nMY CODE:\n\`\`\`\n${userCode}\n\`\`\`` : "";
+  const testSection = tests ? `\n\nTEST REQUIREMENTS:\n\`\`\`\n${tests.join('\n')}\n\`\`\`` : "";
+  const failingTestSection = failingTests ? `\n\nFAILING TESTS:\n\`\`\`\n${failingTests.join('\n')}\n\`\`\`` : "";
+  
+  let userPrompt = `${queryToUse}${codeSection}${testSection}${failingTestSection}`;
+  if (ruleHints) {
+    userPrompt += `\n\nPlease follow these guidelines: ${ruleHints}`;
+  }
+  
+  return userPrompt;
     ? "Focus on questions that lead the learner instead of statements."
     : tone === "study"
       ? "Include a short mini-lesson of at most 3 bullets." : "";
@@ -399,14 +446,13 @@ async function callOllama(ollamaUrl, model, messages){
     content: content,
     used,
     model: model,
-    messages,
     rawMessage
   };
-}
 
 export async function tutorAnswer(mode, context, tone = "nudge") {
   const provider = await store.get('llmProvider', 'openai');
-  const apiKey = await store.get('apiKey');
+  const apiKey = await store.get('apiKey', '');
+  const mockLLM = await store.get('mockLLM', false);
   const groqApiKey = await store.get('groqApiKey');
   const ollamaUrl = await store.get('ollamaUrl', 'http://localhost:11434');
   const ollamaModel = await store.get('ollamaModel', 'llama2');
@@ -414,7 +460,7 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   const storedModel = await store.get('model', DEFAULT_MODEL);
   const model = SUPPORTED_MODELS.has(storedModel) ? storedModel : DEFAULT_MODEL;
   if (!SUPPORTED_MODELS.has(storedModel)) {
-    console.warn(`[TrailNote Tutor] Model "${storedModel}" is not in supported list. Falling back to ${DEFAULT_MODEL}.`);
+    console.warn(`[HintHopper Bunji] Model "${storedModel}" is not in supported list. Falling back to ${DEFAULT_MODEL}.`);
   }
   const hintMode = await store.get('hintMode', 'strict');
   const mock = await store.get('mockLLM', false);
@@ -436,7 +482,7 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   }
   if (!context) throw new Error("Context Preview is empty. Open a freeCodeCamp challenge, then wait a moment before asking again.");
 
-  console.log('[TrailNote Tutor] Received context:', context);
+  console.log('[HintHopper Bunji] Received context:', context);
 
   const title = context.title && context.title.trim();
   const url = context.url && context.url.trim();
@@ -449,20 +495,141 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
     throw new Error("I still can't read the challenge. Check the Context Preview tab—if it's blank, focus the freeCodeCamp editor or run the tests, then try again.");
   }
 
-  if (!hasCode) console.warn('[TrailNote Tutor] No code captured - will work with tests only');
-  if (!hasTests) console.warn('[TrailNote Tutor] No tests captured - will work with code only');
+  if (!hasCode) console.warn('[HintHopper Bunji] No code captured - will work with tests only');
+  if (!hasTests) console.warn('[HintHopper Bunji] No tests captured - will work with code only');
   if (!hasCode && !hasTests && !hasChallengeUrl) {
     throw new Error("Couldn't find code or tests for this page. Open a freeCodeCamp challenge and make sure Context Preview shows details before asking again.");
   }
 
   const toneSetting = MODE_TONE[tone] ? tone : 'nudge';
   const ruleHints = context.ruleHints || '';
-  const userPrompt = makeUserPrompt(mode, context, ruleHints, toneSetting);
+  
+  // Generate test fingerprint for potential A/B testing
+  let testFingerprint = null;
+  let patternId = null;
+  let abVariant = null;
+  
+  // If we have context and A/B testing is enabled, check for variants
+  if (context && context.tests && context.tests.length > 0 && abTesting && outcomeTracker) {
+    try {
+      const trackingEnabled = await outcomeTracker.isEnabled();
+      if (trackingEnabled) {
+        // Create a fingerprint from the first test
+        const testText = context.tests[0];
+        testFingerprint = typeof createHash === 'function' ? 
+          createHash(testText) : 
+          testText.replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+        
+        // Try to extract a pattern ID from the test
+        // This is a simplified approach - in production you'd have more sophisticated pattern matching
+        if (testText.includes('<a') && testText.includes('<p')) {
+          patternId = 'link-inside-first-p';
+        } else if (testText.includes('alt') && testText.includes('img')) {
+          patternId = 'image-alt-text';
+        }
+
+        // If we identified a pattern, get a variant
+        if (patternId && testFingerprint) {
+          abVariant = await abTesting.assignVariant(testFingerprint, patternId);
+          console.log(`[HintHopper] Using A/B variant for ${patternId}:`, abVariant?.name || 'No variant');
+        }
+      }
+    } catch (error) {
+      console.warn('[HintHopper] Error in A/B testing:', error);
+    }
+  }
+
+  const userCode = context.userCode;
+  const tests = context.tests;
+  const failingTests = context.failingTests;
+  const promptType = context.promptType;
+  const userQuery = context.userQuery;
+  const challengeType = context.challengeType;
+
+  let variantType = "default"; // Default variant
+  let enhancedQuery = userQuery;
+
+  // Use NLU for query enhancement if available
+  try {
+    const nlu = (await import('./nlu.js')).default;
+    await nlu.init();
+
+    // Analyze the query to understand intent and improve relevance
+    const analysis = await nlu.analyzeQuery(userQuery, {
+      code: userCode,
+      tests: tests || failingTests || [],
+    });
+
+    if (analysis) {
+      // Get an enhanced query for better hint relevance
+      enhancedQuery = await nlu.suggestBetterQuery(userQuery, {
+        code: userCode,
+        tests: tests || failingTests || []
+      });
+
+      console.log('[HintHopper] Original query:', userQuery);
+      console.log('[HintHopper] Enhanced query:', enhancedQuery);
+      console.log('[HintHopper] Query analysis:', analysis);
+    }
+  } catch (error) {
+    console.warn('[HintHopper] Error using NLU:', error);
+    // Continue with original query if NLU fails
+  }
+
+  // Use A/B testing if enabled
+  if (abTesting) {
+    const assignedVariant = await abTesting.assignVariant({
+      challengeId: context.challengeId,
+      conceptKey: null, // Will be determined later
+      hintType: promptType
+    });
+
+    if (assignedVariant && assignedVariant.type) {
+      variantType = assignedVariant.type;
+      console.log(`[HintHopper] Using A/B variant: ${variantType}`);
+    }
+  }
+
+  // Create the prompt, potentially using the A/B variant
+  let userPrompt, systemPromptContent;
+
+  if (abVariant) {
+    // Use the variant's prompt if available
+    userPrompt = abVariant.prompt ? 
+      makeUserPrompt(mode, context, abVariant.prompt + '\n' + ruleHints, toneSetting) :
+      makeUserPrompt(mode, context, ruleHints, toneSetting);
+    
+    // Use the variant's system prompt if available
+    systemPromptContent = abVariant.systemPrompt ?
+      `${SYS_BASE}\nTone: ${MODE_TONE[toneSetting]}\n${abVariant.systemPrompt}` :
+      buildSystemPrompt(toneSetting);
+  } else {
+    // Use standard prompts
+    userPrompt = makeUserPrompt(mode, context, ruleHints, toneSetting);
+    systemPromptContent = buildSystemPrompt(toneSetting);
+  }
+  
   const messages = [
-    { role: "system", content: buildSystemPrompt(toneSetting) },
+    { role: "system", content: systemPromptContent },
     { role: "user", content: userPrompt }
   ];
 
+  // Use modules that were loaded at the top of the file
+
+  // Track hint request in outcome tracker if enabled
+  let hintId;
+  if (outcomeTracker) {
+    try {
+      const trackingEnabled = await outcomeTracker.isEnabled();
+      if (trackingEnabled) {
+        // Start a new session if there isn't one already
+        await outcomeTracker.startSession();
+      }
+    } catch (error) {
+      console.warn('[HintHopper] Error with outcome tracking:', error);
+    }
+  }
+  
   // Mock mode for testing without API calls
   if (mock) {
     await tokens.bump(50);
@@ -483,9 +650,20 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
             "Set the href attribute to the requested URL."
           ],
       self_check: "Does the first <p> contain an <a> with the correct text and href?",
-      redacted_code_glimpse: '<p> ... <a href="..."></a> ... </p>'
+      redacted_code_glimpse: '<p> ... <a href="..."></a> ... </p>',
+      concept_key: 'link-inside-p'
     };
-    return sanitizeStructuredResponse(canned, hintMode === 'strict');
+    
+    // Track mock hint in outcome data
+    if (outcomeTracker) {
+      try {
+        hintId = await outcomeTracker.trackHintDelivered(mode, context, canned);
+      } catch (error) {
+        console.warn('[HintHopper] Error tracking hint:', error);
+      }
+    }
+    
+    return await sanitizeStructuredResponse(canned, hintMode === 'strict', context);
   }
 
   // Route to appropriate provider
@@ -495,7 +673,7 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   } else if (provider === 'groq') {
     const validGroqModel = GROQ_MODELS.has(groqModel) ? groqModel : 'llama-3.1-8b-instant';
     if (!GROQ_MODELS.has(groqModel)) {
-      console.warn(`[TrailNote Tutor] Groq model "${groqModel}" is not in supported list. Falling back to llama-3.1-8b-instant.`);
+      console.warn(`[HintHopper Bunji] Groq model "${groqModel}" is not in supported list. Falling back to llama-3.1-8b-instant.`);
     }
     result = await callGroq(groqApiKey, validGroqModel, messages);
   } else {
@@ -503,7 +681,25 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   }
   
   const parsed = parseTutorJson(result.content, result.rawMessage?.tool_calls);
-  const sanitized = sanitizeStructuredResponse(parsed, hintMode === 'strict');
+  const sanitized = await sanitizeStructuredResponse(parsed, hintMode === 'strict', context);
+  
+  // Track LLM hint in outcome data
+  if (outcomeTracker) {
+    try {
+      // Add A/B testing metadata to the response
+      if (abVariant && patternId) {
+        sanitized.abTesting = {
+          variantId: abVariant.variantId || null,
+          patternId,
+          testFingerprint
+        };
+      }
+      
+      hintId = await outcomeTracker.trackHintDelivered(mode, context, sanitized);
+    } catch (error) {
+      console.warn('[HintHopper] Error tracking hint:', error);
+    }
+  }
 
   // Emit debug info if debug mode is enabled
   const dbg = await store.get('debugMode', false);
@@ -516,22 +712,26 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
         assistantMessage: {
           content: result.rawMessage?.content || null,
           toolCalls: result.rawMessage?.tool_calls || null
-        }
+        },
+        hintId: hintId // Include the hint ID for tracking
       };
       if (typeof window !== "undefined") {
-        window.__trailNoteLastTutorMessage = result.rawMessage || null;
+        window.__hintHopperLastTutorMessage = result.rawMessage || null;
+        window.__hintHopperLastHintId = hintId;
       }
       chrome.runtime.sendMessage({ type: 'DEBUG_TUTOR', debugPayload }, () => {
         const err = chrome.runtime.lastError;
         if (err && !IGNORABLE_RUNTIME_ERRORS.test(err.message || "")) {
-          console.debug('[TrailNote Tutor] DEBUG_TUTOR message failed:', err.message);
+          console.debug('[HintHopper] DEBUG_TUTOR message failed:', err.message);
         }
       });
     } catch (e) {
-      // ignore
+      console.warn('[HintHopper] Debug info error:', e);
     }
   }
 
   return sanitized;
 }
+
+export default { tutorAnswer, fetchOllamaModels };
 

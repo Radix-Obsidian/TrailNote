@@ -4,7 +4,7 @@
 // Import context grabber - note: MV3 doesn't support ES modules in content scripts by default
 // For now, we inline or use a simple approach
 function grabContextFromDom() {
-  console.log('[TrailNote] === Starting context capture ===');
+  console.log('[HintHopper] === Starting context capture ===');
   
   // Try multiple title selectors
   let title = null;
@@ -22,20 +22,20 @@ function grabContextFromDom() {
     const el = document.querySelector(selector);
     if (el && el.textContent && el.textContent.trim().length > 0) {
       title = el.textContent.trim();
-      console.log(`[TrailNote] Title found via "${selector}": "${title}"`);
+      console.log(`[HintHopper] Title found via "${selector}": "${title}"`);
       break;
     }
   }
   
   if (!title) {
     title = document.title;
-    console.log(`[TrailNote] Title fallback to document.title: "${title}"`);
+    console.log(`[HintHopper] Title fallback to document.title: "${title}"`);
   }
 
   title = (title || '').trim();
   if (!title) {
     title = 'freeCodeCamp Challenge';
-    console.log('[TrailNote] Title fallback to default label');
+    console.log('[HintHopper] Title fallback to default label');
   }
 
   // Try multiple test result selectors - focus on actual test results
@@ -72,7 +72,7 @@ function grabContextFromDom() {
   for (const selector of testSelectors) {
     const nodes = document.querySelectorAll(selector);
     if (nodes.length > 0) {
-      console.log(`[TrailNote] Found ${nodes.length} elements via "${selector}"`);
+      console.log(`[HintHopper] Found ${nodes.length} elements via "${selector}"`);
       testNodes.push(...Array.from(nodes));
     }
   }
@@ -111,12 +111,14 @@ function grabContextFromDom() {
       // Filter out placeholder patterns
       const isPlaceholder = placeholderPatterns.some(pattern => pattern.test(test));
       if (isPlaceholder) {
-        console.log(`[TrailNote] Filtered out placeholder: "${test.substring(0, 50)}..."`);
+        console.log(`[HintHopper] Filtered out placeholder: "${test.substring(0, 50)}..."`);
         return false;
       }
       
       // Keep tests that look like actual test output
-      const looksLikeTest = /test|failed|error|should|hint|sorry/i.test(test) || test.length > 20;
+      // Updated pattern to also catch freeCodeCamp's instruction patterns
+      const looksLikeTest = /test|fail|error|should|hint|sorry|expected|wrap|add|create|element|attribute/i.test(test) || 
+                            test.length > 20;
       
       return looksLikeTest;
     });
@@ -124,7 +126,20 @@ function grabContextFromDom() {
   // Remove duplicates
   const uniqueTests = [...new Set(tests)];
   
-  console.log(`[TrailNote] Tests captured (after filtering): ${uniqueTests.length}`, uniqueTests);
+  // Look for specific rule patterns in the document if no tests were found
+  if (uniqueTests.length === 0 && document.body) {
+    const docText = document.body.innerText || '';
+    const rulesApi = (typeof window !== 'undefined' && window.trailNoteRules) ? window.trailNoteRules : null;
+    const ruleHint = rulesApi?.ruleHintsFromDom ? rulesApi.ruleHintsFromDom() : '';
+    
+    if (ruleHint) {
+      console.log(`[HintHopper] Found rule hint: "${ruleHint}"`);
+      // If we have a rule hint but no tests, create a synthetic test from the hint
+      uniqueTests.push(ruleHint);
+    }
+  }
+  
+  console.log(`[HintHopper] Tests captured (after filtering): ${uniqueTests.length}`, uniqueTests);
 
   // Capture user's code from editor
   let userCode = '';
@@ -140,7 +155,7 @@ function grabContextFromDom() {
         captureMethod = 'monaco-api';
       }
     } catch (e) {
-      console.log('[TrailNote] Monaco API error:', e);
+      console.log('[HintHopper] Monaco API error:', e);
     }
   }
   
@@ -174,7 +189,7 @@ function grabContextFromDom() {
         }
       }
     } catch (e) {
-      console.log('[TrailNote] Iframe check error:', e);
+      console.log('[HintHopper] Iframe check error:', e);
     }
   }
   
@@ -236,15 +251,21 @@ function grabContextFromDom() {
     }
   }
 
-  console.log(`[TrailNote] Code capture - Method: ${captureMethod}, Code length: ${userCode.length}`);
+  console.log(`[HintHopper] Code capture - Method: ${captureMethod}, Code length: ${userCode.length}`);
   if (userCode.length > 0) {
-    console.log(`[TrailNote] Code preview: ${userCode.substring(0, 100)}...`);
+    console.log(`[HintHopper] Code preview: ${userCode.substring(0, 100)}...`);
   }
   
   const rulesApi = (typeof window !== 'undefined' && window.trailNoteRules) ? window.trailNoteRules : null;
   const instruction = rulesApi?.instructionFromDom ? rulesApi.instructionFromDom() : '';
   const ruleHints = rulesApi?.ruleHintsFromDom ? rulesApi.ruleHintsFromDom() : '';
   const codeExcerpt = rulesApi?.codeExcerptFromText ? rulesApi.codeExcerptFromText(userCode) : (userCode || '').slice(0, 400);
+  
+  // If we got rule hints but no tests, make the rule hint a synthetic test
+  if (uniqueTests.length === 0 && ruleHints) {
+    console.log(`[HintHopper] Adding rule hint as synthetic test: "${ruleHints}"`);
+    uniqueTests.push(ruleHints);
+  }
 
   const url = location.pathname;
   const context = {
@@ -257,15 +278,15 @@ function grabContextFromDom() {
     code_excerpt: codeExcerpt
   };
   
-  console.log('[TrailNote] === Final context object ===');
-  console.log('[TrailNote] Title:', context.title);
-  console.log('[TrailNote] URL:', context.url);
-  console.log('[TrailNote] Code length:', context.userCode.length);
-  console.log('[TrailNote] Tests count:', context.tests.length);
-  console.log('[TrailNote] Instruction length:', (instruction||'').length);
-  console.log('[TrailNote] Rule hints:', ruleHints);
-  console.log('[TrailNote] Full context:', context);
-  console.log('[TrailNote] ==============================');
+  console.log('[HintHopper] === Final context object ===');
+  console.log('[HintHopper] Title:', context.title);
+  console.log('[HintHopper] URL:', context.url);
+  console.log('[HintHopper] Code length:', context.userCode.length);
+  console.log('[HintHopper] Tests count:', context.tests.length);
+  console.log('[HintHopper] Instruction length:', (instruction||'').length);
+  console.log('[HintHopper] Rule hints:', ruleHints);
+  console.log('[HintHopper] Full context:', context);
+  console.log('[HintHopper] ==============================');
   
   return context;
 }
@@ -274,33 +295,100 @@ function grabContextFromDom() {
 const IGNORABLE_RUNTIME_ERRORS = /(Extension context invalidated|Receiving end does not exist)/i;
 
 const send = () => {
+  console.log('[HintHopper] Capturing DOM context...');
   const ctx = grabContextFromDom();
+  
+  // Log the final context before sending
+  console.log('[HintHopper] Sending context to background script:', JSON.stringify({
+    title: ctx.title,
+    url: ctx.url,
+    testsCount: ctx.tests?.length || 0,
+    codeLength: ctx.userCode?.length || 0,
+    ruleHints: ctx.ruleHints || ''
+  }));
+  
   try {
     chrome.runtime.sendMessage({ type: "CONTEXT_UPDATE", ctx }, () => {
       const err = chrome.runtime.lastError;
-      if (err && !IGNORABLE_RUNTIME_ERRORS.test(err.message || "")) {
-        console.warn('[TrailNote] CONTEXT_UPDATE message failed:', err.message);
+      if (err) {
+        if (!IGNORABLE_RUNTIME_ERRORS.test(err.message || "")) {
+          console.warn('[HintHopper] CONTEXT_UPDATE message failed:', err.message);
+        }
+      } else {
+        console.log('[HintHopper] Context successfully sent to background script');
       }
     });
   } catch (err) {
     const message = (typeof err === 'string') ? err : err?.message || '';
     if (!IGNORABLE_RUNTIME_ERRORS.test(message)) {
-      console.warn('[TrailNote] CONTEXT_UPDATE send threw:', err);
+      console.warn('[HintHopper] CONTEXT_UPDATE send threw:', err);
     }
   }
 };
 
 // throttle sends to avoid flooding
 let scheduled = false;
-const schedule = () => { 
+let lastHintId = null;
+
+// Store test status to detect passes
+let lastTestStatus = {
+  failingCount: 0,
+  passingCount: 0
+};
+
+// Auto-detect DOM changes and send updates
+function schedule() { 
   if (!scheduled) { 
     scheduled = true; 
     setTimeout(() => { 
       scheduled = false; 
-      send(); 
+      send();
+      checkForTestPasses(); 
     }, 400); 
   } 
 };
+
+// Check for test passes to track outcomes
+function checkForTestPasses() {
+  if (!lastHintId) return; // No hint to track against
+  
+  const tests = document.querySelectorAll('[class*="test"], [class*="pass"], [class*="fail"], [class*="error"]');
+  let passingCount = 0;
+  let failingCount = 0;
+  
+  tests.forEach(test => {
+    const text = test.textContent?.toLowerCase() || '';
+    // Check for pass/fail indicators
+    if (text.includes('pass') || text.includes('success') || test.classList.contains('pass')) {
+      passingCount++;
+    } else if (text.includes('fail') || text.includes('error') || test.classList.contains('fail')) {
+      failingCount++;
+    }
+  });
+  
+  // If there are more passing tests than before, report a pass
+  if (passingCount > lastTestStatus.passingCount || failingCount < lastTestStatus.failingCount) {
+    console.log('[HintHopper] Detected a test pass! Previous passing tests:', lastTestStatus.passingCount, 
+               'Current:', passingCount, 'Hint ID:', lastHintId);
+    
+    // Report the pass to the background script
+    chrome.runtime.sendMessage({
+      type: 'TEST_PASSED',
+      hintId: lastHintId
+    }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        console.warn('[HintHopper] Error reporting test pass:', err.message);
+      }
+    });
+    
+    // Clear the hint ID so we don't double-count
+    lastHintId = null;
+  }
+  
+  // Update the test status
+  lastTestStatus = { passingCount, failingCount };
+}
 
 // initial send
 send();
@@ -318,13 +406,13 @@ const originalReplaceState = history.replaceState;
 
 history.pushState = function(...args) {
   originalPushState.apply(history, args);
-  console.log('[TrailNote] Detected pushState navigation:', location.href);
+  console.log('[HintHopper] Detected pushState navigation:', location.href);
   schedule();
 };
 
 history.replaceState = function(...args) {
   originalReplaceState.apply(history, args);
-  console.log('[TrailNote] Detected replaceState navigation:', location.href);
+  console.log('[HintHopper] Detected replaceState navigation:', location.href);
   schedule();
 };
 
@@ -335,20 +423,62 @@ window.addEventListener('hashchange', schedule);
 let lastUrl = location.href;
 setInterval(() => {
   if (location.href !== lastUrl) {
-    console.log('[TrailNote] URL change detected:', lastUrl, '→', location.href);
+    console.log('[HintHopper] URL change detected:', lastUrl, '→', location.href);
     lastUrl = location.href;
     schedule();
   }
 }, 1000);
 
-console.log("TrailNote content script loaded");
+console.log("HintHopper content script loaded");
 
-// Listen for force refresh requests from panel
+// Listen for force refresh requests and other messages from panel
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Handle force refresh requests
   if (msg?.type === 'FORCE_REFRESH') {
-    console.log('[TrailNote] Received FORCE_REFRESH request, capturing context immediately');
-    send();
-    sendResponse({ success: true });
+    console.log('[HintHopper] Received FORCE_REFRESH request, capturing context immediately');
+    try {
+      // Give the DOM a moment to settle if there were recent changes
+      setTimeout(() => {
+        send();
+        console.log('[HintHopper] Force refresh completed');
+        if (sendResponse) {
+          sendResponse({ success: true, message: 'Context refreshed successfully' });
+        }
+      }, 100);
+    } catch (err) {
+      console.error('[HintHopper] Error during force refresh:', err);
+      if (sendResponse) {
+        sendResponse({ success: false, error: err.message || 'Unknown error during refresh' });
+      }
+    }
+    return true; // Keep the channel open for async response
+  }
+  
+  // Handle test success reporting
+  if (msg?.type === 'TRACK_TEST_PASS' && msg?.hintId) {
+    console.log('[HintHopper] Tracking test pass for hint ID:', msg.hintId);
+    chrome.runtime.sendMessage({
+      type: 'TEST_PASSED',
+      hintId: msg.hintId
+    }, (response) => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        console.warn('[HintHopper] Error reporting test pass:', err.message);
+      }
+      if (sendResponse) {
+        sendResponse({ success: true });
+      }
+    });
+    return true;
+  }
+  
+  // Handle hint shown notification
+  if (msg?.type === 'HINT_SHOWN' && msg?.hintId) {
+    console.log('[HintHopper] Hint shown, setting last hint ID:', msg.hintId);
+    lastHintId = msg.hintId;
+    if (sendResponse) {
+      sendResponse({ success: true });
+    }
     return true;
   }
 });

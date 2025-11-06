@@ -1,0 +1,518 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'">
+  <link rel="stylesheet" href="v2/tokens.css">
+  <link rel="stylesheet" href="v2/layout.css">
+  <link rel="stylesheet" href="v2/components.css">
+  <link rel="stylesheet" href="v2/notes.css">
+  <link rel="stylesheet" href="v2/mastery.css">
+  <link rel="stylesheet" href="v2/flashcards.css">
+  <link rel="stylesheet" href="v2/analytics.css">
+  <link rel="stylesheet" href="v2/chat.css">
+  <title>HintHopper</title>
+</head>
+<body>
+  
+  <!-- Mobile Overlay -->
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+  
+  <!-- Main App Container -->
+  <div class="app-container">
+    
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <button class="btn-icon mobile-nav-toggle" id="mobileNavToggle" style="display: none;">
+          ☰
+        </button>
+        <div class="brand-icon">HH</div>
+        <h1 class="brand-title">
+          HintHopper
+          <span class="brand-version">v0.2.0</span>
+        </h1>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span id="statusText">Ready</span>
+        </div>
+        <button class="btn-icon" id="assistantToggle" title="Toggle assistant panel">
+          💬
+        </button>
+      </div>
+    </header>
+    
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar" id="appSidebar">
+      <nav>
+        <div class="nav-section">
+          <div class="nav-section-title">Main</div>
+          <div class="nav-item active" data-view="tutor">
+            <span class="nav-icon">🦘</span>
+            <span>Bunji</span>
+          </div>
+          <div class="nav-item" data-view="notes">
+            <span class="nav-icon">📝</span>
+            <span>Notes</span>
+            <span class="nav-badge" id="notesCount">0</span>
+          </div>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Tools</div>
+          <div class="nav-item" data-view="mastery">
+            <span class="nav-icon">📈</span>
+            <span>Mastery</span>
+          </div>
+          <div class="nav-item" data-view="flashcards">
+            <span class="nav-icon">📋</span>
+            <span>Flashcards</span>
+            <span class="nav-badge" id="dueCardsCount">0</span>
+          </div>
+          <div class="nav-item" data-view="analytics">
+            <span class="nav-icon">📊</span>
+            <span>Analytics</span>
+          </div>
+          <div class="nav-item" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span>Settings</span>
+          </div>
+        </div>
+      </nav>
+      
+      <!-- Quick Actions in Sidebar -->
+      <div style="margin-top: auto; padding-top: var(--space-6); border-top: 1px solid var(--color-gray-200);">
+        <div style="font-size: var(--font-size-xs); color: var(--color-gray-500); margin-bottom: var(--space-2); padding: 0 var(--space-3);">
+          SHORTCUTS
+        </div>
+        <div style="font-size: var(--font-size-sm); color: var(--color-gray-600); padding: var(--space-2) var(--space-3); line-height: 1.6;">
+          <div><kbd>Ctrl+Shift+N</kbd> New Note</div>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="app-main" id="appMain">
+      
+      <!-- Tutor View -->
+      <div class="view-container" id="tutorView">
+        <div class="main-header">
+          <h2 class="main-title">Bunji</h2>
+          <div class="non-spoiler-badge">
+            <span class="badge badge-success">
+              <span class="badge-icon">✓</span>
+              <span class="badge-text">Non-spoiler compliant</span>
+            </span>
+          </div>
+        </div>
+        
+        <!-- Smart Resurfacing Banner -->
+        <div id="resurfaceBanner" style="display:none;" class="alert alert-warning">
+          <span class="alert-icon">💡</span>
+          <div class="alert-content">
+            <div class="alert-title">Related notes found</div>
+            <div class="alert-message" id="resurfaceMessage"></div>
+          </div>
+          <button class="btn-secondary btn-sm" id="resurfaceOpen">View</button>
+          <button class="alert-dismiss" id="resurfaceDismiss">×</button>
+        </div>
+        
+        <!-- Context Preview Card -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3 class="card-title">Challenge Context</h3>
+          </div>
+          <div id="contextPreview" class="card-body" style="font-family: var(--font-family-mono); background: var(--color-gray-50); padding: var(--space-4); border-radius: var(--radius-md); min-height: 120px; max-height: 400px; overflow-y: auto;">
+            <div style="color: var(--color-gray-400); text-align: center; padding: var(--space-8);">
+              Loading challenge context...
+            </div>
+          </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="action-group" style="margin-bottom: var(--space-4);">
+          <button class="btn-primary" id="btnExplain">
+            <span>🔍</span>
+            Explain Tests
+          </button>
+          <button class="btn-secondary" id="btnNudge">
+            <span>👉</span>
+            Nudge Me
+          </button>
+          <button class="btn-secondary" id="btnConcept">
+            <span>🎯</span>
+            Concept Check
+          </button>
+        </div>
+        
+        <!-- Tutor Answer -->
+        <div class="content-card" id="answerCard" style="display: none;">
+          <div class="card-header">
+            <h3 class="card-title">Bunji's Response</h3>
+          </div>
+          <div id="answer" class="card-body"></div>
+        </div>
+        
+        <!-- Token Usage -->
+        <div style="margin-top: var(--space-4); padding: var(--space-3); background: var(--color-gray-50); border-radius: var(--radius-md); font-size: var(--font-size-sm); color: var(--color-gray-600); text-align: center;">
+          <span id="tokenBar" title="Tracks AI API usage">Session: 0 • Today: 0</span>
+        </div>
+      </div>
+      
+      <!-- Notes View -->
+      <div class="view-container" id="notesView" style="display: none;">
+        <div class="main-header">
+          <h2 class="main-title">Smart Notes</h2>
+          <div class="main-actions">
+            <button class="btn-secondary btn-sm" id="exportMd">
+              <span>📤</span>
+              Export
+            </button>
+          </div>
+        </div>
+        
+        <!-- Note Composer -->
+        <div class="content-card">
+          <div class="card-header">
+            <h3 class="card-title">New Note</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label" for="noteProblem">Problem (from failing test)</label>
+              <input class="form-input" id="noteProblem" type="text" placeholder="e.g., Image missing alt attribute">
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label required" for="noteInsight">Insight (one sentence learned)</label>
+              <textarea class="form-textarea" id="noteInsight" rows="2" placeholder="e.g., Alt text describes images for screen readers"></textarea>
+              <small class="form-hint" id="insightCounter">0/120 chars</small>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="noteSelfCheck">Self-check (yes/no question)</label>
+              <input class="form-input" id="noteSelfCheck" type="text" placeholder="e.g., Does my img have meaningful alt text?">
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="noteBody">Additional thoughts (optional)</label>
+              <textarea class="form-textarea" id="noteBody" rows="2" placeholder="Extra details or context..."></textarea>
+              <small class="form-hint" id="bodyCounter">0 chars</small>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="noteTags">Tags</label>
+              <input class="form-input" id="noteTags" placeholder="#flexbox #a11y">
+            </div>
+            
+            <!-- Quality Nudge -->
+            <div id="qualityNudge" class="alert alert-warning" style="display: none;">
+              <span class="alert-icon">💡</span>
+              <div class="alert-content">
+                <strong>Tip:</strong> Keep it punchy. Try 1 sentence for insight + 1 for self-check.
+              </div>
+            </div>
+            
+            <button class="btn-primary" id="saveNote">
+              <span>💾</span>
+              Save Note
+            </button>
+          </div>
+        </div>
+        
+        <!-- Notes List -->
+        <div class="content-card" style="margin-top: var(--space-4);">
+          <div class="card-header">
+            <h3 class="card-title">Your Notes</h3>
+          </div>
+          <div class="card-body">
+            <input class="form-input" id="noteSearch" placeholder="🔍 Search notes..." style="margin-bottom: var(--space-4);">
+            <ul id="noteList" class="list"></ul>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Mastery View -->
+      <div class="view-container" id="masteryView" style="display: none;">
+        <div class="main-header">
+          <h2 class="main-title">Concept Mastery</h2>
+        </div>
+        
+        <!-- Mastery content will be rendered here -->
+        <div id="masteryContent">
+          <div class="spinner" style="margin: var(--space-8) auto;"></div>
+        </div>
+      </div>
+      
+      <!-- Flashcards View -->
+      <div class="view-container" id="flashcardsView" style="display: none;">
+        <div class="main-header">
+          <h2 class="main-title">Flashcards</h2>
+          <div class="header-actions">
+            <button class="btn-primary btn-sm" id="startReviewBtn" style="display: none;">
+              <span>▶️</span>
+              Start Review
+            </button>
+          </div>
+        </div>
+        
+        <!-- Flashcards content -->
+        <div id="flashcardsContent">
+          <div class="flashcards-dashboard">
+            <div class="flashcards-stats">
+              <div class="spinner" style="margin: var(--space-8) auto;"></div>
+            </div>
+          </div>
+          
+          <!-- Flashcards list -->
+          <div class="content-card" style="margin-top: var(--space-4);">
+            <div class="card-header">
+              <h3 class="card-title">Your Flashcards</h3>
+              <div class="card-actions">
+                <button class="btn-tertiary btn-sm" id="createFlashcardBtn">
+                  <span>+</span> New
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <ul id="flashcardsList" class="list"></ul>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Flashcard review mode -->
+        <div id="flashcardReview" style="display: none;">
+          <div class="flashcard-container">
+            <div class="flashcard">
+              <div class="flashcard-front active" id="cardFront"></div>
+              <div class="flashcard-back" id="cardBack"></div>
+            </div>
+            
+            <div class="flashcard-actions">
+              <button class="btn-secondary btn-sm" id="flipCardBtn">Show Answer</button>
+              <div class="flashcard-rating" style="display: none;">
+                <div class="flashcard-rating-header">Rate your response:</div>
+                <div class="flashcard-rating-buttons">
+                  <button class="btn-error btn-sm rating-btn" data-quality="0">Failed</button>
+                  <button class="btn-error btn-sm rating-btn" data-quality="1">Hard</button>
+                  <button class="btn-warning btn-sm rating-btn" data-quality="2">Difficult</button>
+                  <button class="btn-warning btn-sm rating-btn" data-quality="3">Medium</button>
+                  <button class="btn-success btn-sm rating-btn" data-quality="4">Easy</button>
+                  <button class="btn-success btn-sm rating-btn" data-quality="5">Perfect</button>
+                </div>
+                <div class="rating-tip">0-2: Repeat soon, 3-5: Increasing intervals</div>
+              </div>
+            </div>
+            
+            <div class="flashcard-progress">
+              <div class="progress">
+                <div class="progress-bar" id="reviewProgress" style="width: 0%"></div>
+              </div>
+              <div class="progress-text" id="reviewProgressText">0/0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Analytics View -->
+      <div class="view-container" id="analyticsView" style="display: none;">
+        <div class="main-header">
+          <h2 class="main-title">Analytics</h2>
+        </div>
+        
+        <!-- Analytics content will be rendered here -->
+        <div id="analyticsContent">
+          <div class="spinner" style="margin: var(--space-8) auto;"></div>
+        </div>
+      </div>
+      
+      <!-- Settings View -->
+      <div class="view-container" id="settingsView" style="display: none;">
+        <div class="main-header">
+          <h2 class="main-title">Settings</h2>
+        </div>
+        
+        <div class="content-card">
+          <div class="card-header">
+            <h3 class="card-title">LLM Provider</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Provider</label>
+              <select class="form-select" id="llmProvider">
+                <option value="openai" selected>OpenAI</option>
+                <option value="groq">Groq (Fast & Free)</option>
+                <option value="ollama">Ollama (Local/Cloud)</option>
+              </select>
+            </div>
+            
+            <div id="openaiSettings">
+              <div class="form-group">
+                <label class="form-label" for="apiKey">OpenAI API Key</label>
+                <input class="form-input" id="apiKey" type="password" placeholder="sk-...">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Model</label>
+                <select class="form-select" id="modelSelect">
+                  <option value="gpt-4o-mini" selected>gpt-4o-mini (default)</option>
+                  <option value="gpt-4o">gpt-4o</option>
+                  <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                  <option value="gpt-4.1">gpt-4.1</option>
+                  <option value="o4-mini">o4-mini</option>
+                  <option value="o4">o4</option>
+                </select>
+              </div>
+            </div>
+            
+            <div id="groqSettings" style="display:none;">
+              <div class="form-group">
+                <label class="form-label" for="groqApiKey">Groq API Key</label>
+                <input class="form-input" id="groqApiKey" type="password" placeholder="gsk_...">
+                <small class="form-hint">Get your free API key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></small>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Model</label>
+                <select class="form-select" id="groqModel">
+                  <option value="llama-3.1-8b-instant" selected>llama-3.1-8b-instant (fast, free)</option>
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (powerful)</option>
+                  <option value="openai/gpt-oss-120b">gpt-oss-120b (most powerful)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div id="ollamaSettings" style="display:none;">
+              <div class="form-group">
+                <label class="form-label" for="ollamaUrl">Ollama URL</label>
+                <input class="form-input" id="ollamaUrl" type="text" placeholder="http://localhost:11434" value="http://localhost:11434">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Model</label>
+                <div style="display:flex;gap:var(--space-2);">
+                  <select class="form-select" id="ollamaModel" style="flex:1;">
+                    <option value="llama2">llama2 (default)</option>
+                  </select>
+                  <button class="btn-secondary btn-sm" id="refreshOllamaModels">Refresh</button>
+                </div>
+                <small class="form-hint" id="ollamaModelStatus">Click Refresh to detect installed models</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="content-card" style="margin-top: var(--space-4);">
+          <div class="card-header">
+            <h3 class="card-title">Tutor Preferences</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Hint Mode</label>
+              <select class="form-select" id="hintMode">
+                <option value="strict">Strict (no code solutions)</option>
+                <option value="guided">Guided (partial code help)</option>
+                <option value="demo">Demo (full example solutions)</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="improveBunji">
+                <label class="form-check-label" for="improveBunji">
+                  <span class="fw-semibold">Improve Bunji</span><br>
+                  <span class="text-muted fs-sm">Help make Bunji smarter by sharing anonymous hint outcomes</span>
+                  <a href="#" id="privacyDetailsLink" class="badge badge-secondary ml-2">Details</a>
+                </label>
+              </div>
+            </div>
+            
+            <div class="form-checkbox">
+              <input type="checkbox" id="debugMode">
+              <label for="debugMode">Debug mode (show request/response)</label>
+            </div>
+            
+            <div class="form-checkbox">
+              <input type="checkbox" id="mockLLM">
+              <label for="mockLLM">Mock LLM (test without API calls)</label>
+            </div>
+            
+            <pre id="debugBox" style="display:none; max-height:200px; overflow:auto; background:var(--color-gray-900); color:var(--color-gray-100); padding:var(--space-3); border-radius:var(--radius-md); font-size:var(--font-size-xs);"></pre>
+          </div>
+          
+          <div class="card-footer">
+            <button class="btn-primary" id="savePrefs">
+              <span>💾</span>
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </div>
+      
+    </main>
+    
+    <!-- Assistant Panel (Chat) -->
+    <aside class="app-assistant" id="appAssistant">
+      <div class="panel-header">
+        <h3 class="panel-title">Learning Assistant</h3>
+        <button class="btn-icon" id="closeAssistant" title="Close">
+          ×
+        </button>
+      </div>
+      <div class="panel-content" id="chatContainer">
+        <!-- Chat interface will be injected here -->
+      </div>
+    </aside>
+    
+  </div>
+  
+  <!-- Privacy Details Modal -->
+  <div class="modal" id="privacyDetailsModal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title">Privacy & Data Collection</h3>
+        <button class="modal-close" id="closePrivacyModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-4">
+          <h4 class="mb-2">When you enable "Improve Bunji":</h4>
+          <p>We collect anonymous data to improve hint effectiveness:</p>
+          <ul>
+            <li><strong>Collected:</strong> Anonymized test fingerprints (never your full code), concept identifiers, time between hint and pass/fail</li>
+            <li><strong>Never collected:</strong> Your code, personal information, or browsing history</li>
+            <li><strong>Benefits:</strong> Bunji gets better at giving helpful hints for common challenges</li>
+          </ul>
+        </div>
+        
+        <div class="mb-4">
+          <h4 class="mb-2">Privacy-first approach:</h4>
+          <ul>
+            <li>All data is anonymous and aggregated</li>
+            <li>Strictly opt-in (off by default)</li> 
+            <li>You can delete your data anytime</li>
+            <li>You can see what was collected in the "Privacy receipt"</li>
+          </ul>
+        </div>
+        
+        <div class="alert alert-info">
+          <span class="alert-icon">ℹ️</span>
+          <div class="alert-content">
+            <div class="alert-title">Why this matters</div>
+            <div class="alert-message">Your feedback helps us build a dataset of "what hints actually help students pass challenges" - making Bunji more effective for everyone!</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="confirmPrivacyDetails">Got it</button>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="panel-v2.js"></script>
+  <script src="../lib/storage.js" type="module"></script>
+  <script src="../lib/tokens.js" type="module"></script>
+  <script src="../lib/utils.js" type="module"></script>
+  <script src="../lib/outcome-tracker.js" type="module"></script>
+  <script src="../lib/tutor.js" type="module"></script>
+  <script src="../lib/struggle-detector.js" type="module"></script>
+</body>
+</html>

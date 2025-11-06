@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "TrailNote",
+  "name": "HintHopper",
   "version": "0.2.0",
-  "description": "AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.",
+  "description": "Hop to the hint: AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.",
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -32,7 +32,7 @@
     }
   ],
   "side_panel": {
-    "default_path": "src/panel/panel.html"
+    "default_path": "src/panel/panel-v2.html"
   },
   "action": {
     "default_title": "Open TrailNote"
