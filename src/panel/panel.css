@@ -11,3 +11,270 @@ header { padding: 8px 12px; border-bottom: 1px solid #eee; display:flex; justify
 #tokenBar { margin-top:10px; color:#555; font-size:12px; }
 .muted { color:#777; font-size:12px; }
 
+.tutor-output { display:flex; flex-direction:column; gap:12px; }
+.tutor-output .tone-line { display:flex; justify-content:flex-end; margin-bottom:8px; }
+.tone-pill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#e0f2fe; color:#0369a1; text-transform:capitalize; }
+.tone-pill.tone-study { background:#fef3c7; color:#92400e; }
+.tone-pill.tone-exam { background:#fee2e2; color:#991b1b; }
+.box.error { background:#fff5f5; border-color:#f5c2c7; color:#9f1239; }
+
+/* Editor-style rendering */
+.editor-section { 
+  background:#1e1e1e; 
+  border:1px solid #3e3e3e; 
+  border-radius:4px; 
+  overflow:hidden;
+  margin-bottom:8px;
+}
+.editor-label {
+  background:#252526;
+  color:#cccccc;
+  font-size:12px;
+  font-weight:600;
+  padding:6px 12px;
+  border-bottom:1px solid #3e3e3e;
+  font-family:system-ui, -apple-system, sans-serif;
+}
+.editor-code {
+  font-family:'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size:13px;
+  line-height:1.6;
+  color:#d4d4d4;
+  background:#1e1e1e;
+  padding:8px 0;
+  overflow-x:auto;
+}
+.editor-line {
+  display:flex;
+  min-height:20px;
+  padding:0 12px;
+}
+.editor-line:hover {
+  background:#2a2d2e;
+}
+.editor-line .line-num {
+  display:inline-block;
+  width:32px;
+  text-align:right;
+  padding-right:12px;
+  color:#858585;
+  font-size:12px;
+  user-select:none;
+  flex-shrink:0;
+}
+.editor-line .line-content {
+  flex:1;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.editor-line .line-content.muted {
+  color:#858585;
+  font-style:italic;
+}
+
+/* Context preview - Figma editor style */
+#contextPreview {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1f2937;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  min-height: 120px;
+  max-height: 600px; /* Allow scrolling for very long code, but show more content */
+  overflow-y: auto; /* Allow scrolling for long code */
+  overflow-x: auto; /* Keep horizontal scroll for long lines */
+}
+
+#contextPreview:empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-style: italic;
+}
+
+#contextPreview:empty::before {
+  content: 'Loading page context...';
+}
+
+/* Green flash on update */
+#contextPreview.flash {
+  background-color: #ecfdf5;
+  border-color: #10b981;
+}
+
+/* Scrollbar styling for context preview */
+#contextPreview::-webkit-scrollbar {
+  width: 8px;
+}
+
+#contextPreview::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+#contextPreview::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+#contextPreview::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Context sections with structure */
+.ctx-section {
+  margin-bottom: 16px;
+}
+
+.ctx-label {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.ctx-title {
+  font-weight: 600;
+  color: #1f2937;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.ctx-url {
+  color: #6b7280;
+  font-size: 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.ctx-header {
+  font-weight: 600;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 8px;
+  font-family: system-ui, -apple-system, sans-serif;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ctx-content {
+  margin-top: 8px;
+}
+
+.ctx-code {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto; /* Allow horizontal scroll for long code lines */
+  max-width: 100%;
+}
+
+.ctx-code .code-block {
+  max-width: 100%;
+  overflow-x: auto; /* Ensure code block can scroll horizontally */
+  white-space: pre; /* Change to pre to preserve exact formatting */
+  word-break: normal; /* Don't break words */
+}
+
+.code-block {
+  margin: 0;
+  padding: 0;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #24292e; /* Default text color - VS Code Light+ */
+  background: transparent;
+}
+
+/* VS Code Light+ theme syntax highlighting colors (matching actual VS Code) */
+.syn-tag {
+  color: #800000; /* Dark red/brown - HTML tags */
+  font-weight: 500;
+}
+
+.syn-attr {
+  color: #e50000; /* Red - HTML attributes */
+}
+
+.syn-string {
+  color: #a31515; /* Dark red - HTML string values */
+}
+
+.syn-punct {
+  color: #24292e; /* Black - punctuation (<, >, =, ", etc.) */
+}
+
+.syn-comment {
+  color: #008000; /* Green - HTML comments */
+  font-style: italic;
+}
+
+.syn-selector {
+  color: #800000; /* Dark red - CSS selectors */
+}
+
+.syn-property {
+  color: #0451a5; /* Dark blue - CSS properties */
+}
+
+/* Test items */
+.ctx-tests {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.test-item {
+  padding: 6px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1f2937;
+}
+
+.test-item + .test-item {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 6px;
+  padding-top: 12px;
+}
+
+.test-num {
+  display: inline-block;
+  min-width: 24px;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Timestamp */
+.ctx-timestamp {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 11px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Empty state */
+.ctx-empty {
+  text-align: center;
+  color: #9ca3af;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+

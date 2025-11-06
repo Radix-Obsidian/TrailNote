@@ -1,60 +1,26 @@
-// Storage utilities for TrailNote extension
+// Storage utilities for TrailNote
 // Uses Chrome storage API for persistent data
 
-/**
- * Save data to Chrome storage
- * @param {string} key - Storage key
- * @param {any} value - Value to store
- * @returns {Promise<void>}
- */
-export async function saveData(key, value) {
-  try {
-    await chrome.storage.local.set({ [key]: value });
-  } catch (error) {
-    console.error('Error saving data:', error);
-    throw error;
+export const store = {
+  async get(key, def=null) {
+    return new Promise(res => chrome.storage.local.get([key], x => res(x[key] ?? def)));
+  },
+  async set(key, val) {
+    return new Promise(res => chrome.storage.local.set({[key]: val}, res));
   }
-}
+};
 
-/**
- * Load data from Chrome storage
- * @param {string} key - Storage key
- * @returns {Promise<any>} - Stored value or null if not found
- */
-export async function loadData(key) {
-  try {
-    const result = await chrome.storage.local.get(key);
-    return result[key] || null;
-  } catch (error) {
-    console.error('Error loading data:', error);
-    throw error;
-  }
-}
-
-/**
- * Remove data from Chrome storage
- * @param {string} key - Storage key
- * @returns {Promise<void>}
- */
-export async function removeData(key) {
-  try {
-    await chrome.storage.local.remove(key);
-  } catch (error) {
-    console.error('Error removing data:', error);
-    throw error;
-  }
-}
-
-/**
- * Clear all storage data
- * @returns {Promise<void>}
- */
-export async function clearStorage() {
-  try {
-    await chrome.storage.local.clear();
-  } catch (error) {
-    console.error('Error clearing storage:', error);
-    throw error;
-  }
-}
+// Notes API helpers
+export const notesApi = {
+  async list() {
+    const all = await store.get('notes', []);
+    return all.sort((a,b)=> (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+  },
+  async add(note) {
+    const all = await store.get('notes', []);
+    all.push(note);
+    await store.set('notes', all); 
+  },
+  async saveAll(arr){ await store.set('notes', arr); }
+};
 

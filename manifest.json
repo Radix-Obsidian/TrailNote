@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Agentic freeCodeCamp Companion",
-  "version": "0.1.0",
+  "name": "TrailNote",
+  "version": "0.2.0",
   "description": "AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.",
   "icons": {
     "16": "assets/icon16.png",
@@ -16,7 +16,10 @@
   ],
   "host_permissions": [
     "https://www.freecodecamp.org/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://api.groq.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -24,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.freecodecamp.org/*"],
-      "js": ["src/content.js"],
+      "js": ["src/lib/rules.js", "src/content.js"],
       "run_at": "document_idle"
     }
   ],
@@ -32,7 +35,7 @@
     "default_path": "src/panel/panel.html"
   },
   "action": {
-    "default_title": "Open Companion"
+    "default_title": "Open TrailNote"
   }
 }
 

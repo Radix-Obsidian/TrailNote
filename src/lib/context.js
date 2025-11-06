@@ -1,86 +1,79 @@
-// Context management for TrailNote extension
-// Manages conversation history and context for tutoring sessions
-
-import { saveData, loadData } from './storage.js';
-import { estimateTokens, truncateToTokenLimit } from './tokens.js';
-
-const CONTEXT_KEY = 'trailnote_context';
-const MAX_CONTEXT_TOKENS = 4000; // Adjust based on API limits
+// Context collector for freeCodeCamp pages
+// Grabs lesson context from DOM with resilient selectors
 
 /**
- * Get current conversation context
- * @returns {Promise<Array>} - Array of conversation messages
+ * Grab context from freeCodeCamp DOM
+ * Uses resilient selectors with fallbacks for challenge pages
+ * @returns {Object} - { title, url, tests, userCode }
  */
-export async function getContext() {
-  try {
-    const context = await loadData(CONTEXT_KEY);
-    return context || [];
-  } catch (error) {
-    console.error('Error getting context:', error);
-    return [];
-  }
-}
+export function grabContextFromDom() {
+  const title =
+    (document.querySelector('[data-test*="challenge-title"]')?.textContent) ||
+    (document.querySelector('h1,h2')?.textContent) ||
+    document.title;
 
-/**
- * Add message to context
- * @param {string} role - 'user' or 'assistant'
- * @param {string} content - Message content
- * @returns {Promise<void>}
- */
-export async function addToContext(role, content) {
-  try {
-    const context = await getContext();
-    context.push({ role, content, timestamp: Date.now() });
-    
-    // Trim context if it exceeds token limit
-    const trimmedContext = await trimContext(context);
-    
-    await saveData(CONTEXT_KEY, trimmedContext);
-  } catch (error) {
-    console.error('Error adding to context:', error);
-    throw error;
-  }
-}
+  // collect visible test messages (common patterns; safe fallbacks)
+  const testNodes = [
+    ...document.querySelectorAll('[class*="test"], [data-testid*="test"], li[class*="fail"], li[class*="error"]')
+  ].slice(0, 10);
 
-/**
- * Clear conversation context
- * @returns {Promise<void>}
- */
-export async function clearContext() {
-  try {
-    await saveData(CONTEXT_KEY, []);
-  } catch (error) {
-    console.error('Error clearing context:', error);
-    throw error;
-  }
-}
+  const tests = testNodes.map(n => n.textContent.trim()).filter(Boolean);
 
-/**
- * Trim context to fit within token limits
- * @param {Array} context - Current context array
- * @returns {Promise<Array>} - Trimmed context
- */
-async function trimContext(context) {
-  // Calculate total tokens
-  let totalTokens = context.reduce((sum, msg) => {
-    return sum + estimateTokens(msg.content);
-  }, 0);
+  // Capture user's code from editor
+  let userCode = '';
   
-  // Remove oldest messages if over limit
-  while (totalTokens > MAX_CONTEXT_TOKENS && context.length > 0) {
-    const removed = context.shift();
-    totalTokens -= estimateTokens(removed.content);
+  // Try multiple approaches to find the editor content
+  // 1. Monaco editor textarea (most common)
+  const monacoTextarea = document.querySelector('.monaco-editor textarea');
+  if (monacoTextarea) {
+    userCode = monacoTextarea.value || '';
   }
   
-  // If still too long, truncate the first message
-  if (totalTokens > MAX_CONTEXT_TOKENS && context.length > 0) {
-    const firstMessage = context[0];
-    firstMessage.content = truncateToTokenLimit(
-      firstMessage.content,
-      MAX_CONTEXT_TOKENS - (totalTokens - estimateTokens(firstMessage.content))
-    );
+  // 2. Direct textarea selectors (fallback)
+  if (!userCode) {
+    const editorTextarea = document.querySelector('textarea[class*="input"], textarea[class*="editor"], textarea[data-cy="code-editor"]');
+    if (editorTextarea) {
+      userCode = editorTextarea.value || '';
+    }
   }
   
-  return context;
+  // 3. Code editor container (monaco editor content)
+  if (!userCode) {
+    const editorContainer = document.querySelector('[class*="monaco-editor"], [class*="code-editor"], [data-cy="code-editor"]');
+    if (editorContainer) {
+      // Try to get text from all text nodes
+      const walker = document.createTreeWalker(
+        editorContainer,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+      let textNodes = [];
+      let node;
+      while (node = walker.nextNode()) {
+        const text = node.textContent.trim();
+        if (text && text.length > 0) {
+          textNodes.push(text);
+        }
+      }
+      if (textNodes.length > 0) {
+        userCode = textNodes.join('\n');
+      }
+    }
+  }
+  
+  // 4. Try accessing Monaco editor API if available
+  if (!userCode && window.monaco) {
+    try {
+      const editors = window.monaco.editor.getEditors();
+      if (editors && editors.length > 0) {
+        userCode = editors[0].getValue() || '';
+      }
+    } catch (e) {
+      // Monaco API not accessible, continue
+    }
+  }
+
+  const url = location.pathname;
+  return { title, url, tests, userCode: userCode.trim() };
 }
 

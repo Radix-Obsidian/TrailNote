@@ -4,11 +4,11 @@
   <meta charset="utf-8"/>
   <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'">
   <link rel="stylesheet" href="panel.css">
-  <title>Companion</title>
+  <title>TrailNote</title>
 </head>
 <body>
   <header>
-    <h1>Companion</h1>
+    <h1>TrailNote <span id="versionBadge" style="font-size:10px; color:#888; font-weight:normal;">v0.2.0</span></h1>
     <small id="status">ready</small>
   </header>
 
@@ -26,6 +26,7 @@
       <button id="btnConcept">Concept check</button>
     </div>
     <div id="answer" class="box"></div>
+    <p class="muted">Strict mode removes long code to keep you learning, not copying.</p>
     <footer id="tokenBar">Session: 0 • Today: 0</footer>
   </section>
 
@@ -43,26 +44,116 @@
   </section>
 
   <section id="settings" class="tab">
-    <label>OpenAI API Key <input id="apiKey" type="password" placeholder="sk-..."></label>
-    <label>Model
-      <input id="model" value="gpt-4o-mini">
+    <label>LLM Provider
+      <select id="llmProvider">
+        <option value="openai" selected>OpenAI</option>
+        <option value="groq">Groq (Fast & Free)</option>
+        <option value="ollama">Ollama (Local/Cloud)</option>
+      </select>
     </label>
+    <div id="openaiSettings">
+      <label>OpenAI API Key <input id="apiKey" type="password" placeholder="sk-..."></label>
+      <label>Model
+        <select id="modelSelect">
+          <option value="gpt-4o-mini" selected>gpt-4o-mini (default)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+          <option value="o4-mini">o4-mini</option>
+          <option value="o4">o4</option>
+        </select>
+      </label>
+    </div>
+    <div id="ollamaSettings" style="display:none;">
+      <label>Ollama URL <input id="ollamaUrl" type="text" placeholder="http://localhost:11434" value="http://localhost:11434"></label>
+      <label>Model
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="ollamaModel" style="flex:1;">
+            <option value="llama2">llama2 (default)</option>
+          </select>
+          <button id="refreshOllamaModels" type="button" style="padding:4px 12px;font-size:12px;">Refresh</button>
+        </div>
+        <small class="muted" id="ollamaModelStatus">Click Refresh to detect installed models</small>
+      </label>
+      <div style="margin-top:12px; padding:12px; background:#f0f7ff; border-radius:6px; border:1px solid #b3d9ff;">
+        <strong style="display:block; margin-bottom:8px;">Ollama Cloud (Optional)</strong>
+        <p style="margin:0 0 8px 0; font-size:12px; color:#555;">
+          Use Ollama Cloud models without running Ollama locally. Requires free Ollama account.
+        </p>
+        <button id="ollamaCloudSignin" style="padding:8px 16px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px;">
+          Sign in to Ollama Cloud
+        </button>
+        <small id="ollamaCloudStatus" class="muted" style="display:block; margin-top:8px;"></small>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:8px;">
+        <strong>Note:</strong> All models shown are available locally. Models are organized by category below.
+        <br><strong>CORS Setup:</strong> If you get 403 errors, a help dialog will appear with step-by-step instructions.
+      </p>
+    </div>
+    <div id="groqSettings" style="display:none;">
+      <label>Groq API Key <input id="groqApiKey" type="password" placeholder="gsk_..."></label>
+      <label>Model
+        <select id="groqModel">
+          <option value="llama-3.1-8b-instant" selected>llama-3.1-8b-instant (fast, free tier)</option>
+          <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile (powerful)</option>
+          <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (long context)</option>
+          <option value="gemma-7b-it">gemma-7b-it (Google model)</option>
+          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (latest)</option>
+          <option value="llama-3.2-90b-text-preview">llama-3.2-90b-text-preview (preview)</option>
+        </select>
+      </label>
+      <div style="margin-top:12px; padding:12px; background:#f0f7ff; border-radius:6px; border:1px solid #b3d9ff;">
+        <strong style="display:block; margin-bottom:8px;">Get Your Free API Key</strong>
+        <p style="margin:0 0 8px 0; font-size:12px; color:#555;">
+          Groq offers fast inference with a generous free tier. Get started at <a href="https://console.groq.com/keys" target="_blank" style="color:#0066cc;">console.groq.com/keys</a>
+        </p>
+        <p style="margin:0; font-size:11px; color:#666;">
+          <strong>Free tier:</strong> Fast responses with no credit card required. Perfect for learning!
+        </p>
+      </div>
+    </div>
     <label>Hint Mode
       <select id="hintMode">
         <option value="strict" selected>Strict hints (no code)</option>
         <option value="expanded">Hints + tiny snippets</option>
       </select>
     </label>
+    <label>Tutor Tone
+      <select id="tutorTone">
+        <option value="nudge" selected>Nudge (gentle coach)</option>
+        <option value="study">Study (mini-lesson)</option>
+        <option value="exam">Exam (Socratic)</option>
+      </select>
+    </label>
+    <label>
+      <input type="checkbox" id="debugMode"> Debug mode (show last request/response)
+    </label>
+    <pre id="debugBox" class="box" style="display:none;max-height:160px;overflow:auto;"></pre>
+    <label>
+      <input type="checkbox" id="mockLLM"> Mock LLM (test without API calls)
+    </label>
     <button id="savePrefs">Save Settings</button>
     <p class="muted">Notes & token counts stay on your device.</p>
   </section>
 
-  <script src="../lib/storage.js"></script>
-  <script src="../lib/tokens.js"></script>
-  <script src="../lib/rateLimit.js"></script>
-  <script src="../lib/context.js"></script>
-  <script src="../lib/tutor.js"></script>
-  <script src="panel.js"></script>
+  <!-- CORS Help Modal -->
+  <div id="corsHelpModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; flex-direction:column;">
+    <div style="background:white; border-radius:12px; padding:28px; max-width:560px; max-height:80vh; overflow-y:auto; margin:20px; box-shadow:0 4px 24px rgba(0,0,0,0.2);">
+      <h2 style="margin-top:0; color:#1e1e1e; font-size:20px;">Let's Connect Ollama</h2>
+      <p style="color:#666; margin-bottom:24px; font-size:14px; line-height:1.5;">
+        Quick setup to let TrailNote talk to Ollama. Takes about 30 seconds!
+      </p>
+      
+      <div id="corsPlatformInstructions" style="margin-bottom:24px;"></div>
+      
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button id="corsHelpClose" style="padding:10px 20px; border:1px solid #ddd; background:white; border-radius:8px; cursor:pointer; font-size:14px; color:#333;">Close</button>
+        <button id="corsHelpTest" style="padding:10px 20px; border:none; background:#0066cc; color:white; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;">Test Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="panel.js"></script>
 </body>
 </html>
 
