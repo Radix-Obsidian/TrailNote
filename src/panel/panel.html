@@ -19,6 +19,16 @@
   </nav>
 
   <section id="tutor" class="tab active">
+    <div id="resurfaceBanner" style="display:none;background:#fef3c7;border:1px solid #fbbf24;padding:12px;border-radius:6px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <div style="font-weight:600;color:#92400e;margin-bottom:4px;"> Related notes found</div>
+          <div id="resurfaceMessage" style="font-size:13px;color:#78350f;"></div>
+        </div>
+        <button id="resurfaceOpen" style="padding:4px 12px;background:#fbbf24;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;color:#78350f;">View</button>
+      </div>
+      <button id="resurfaceDismiss" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:#92400e;font-size:16px;">×</button>
+    </div>
     <div id="contextPreview"></div>
     <div class="actions">
       <button id="btnExplain">Explain tests</button>
@@ -27,15 +37,35 @@
     </div>
     <div id="answer" class="box"></div>
     <p class="muted">Strict mode removes long code to keep you learning, not copying.</p>
-    <footer id="tokenBar">Session: 0 • Today: 0</footer>
+    <footer id="tokenBar" title="Tracks AI API usage: Session = since opening extension, Today = all usage today. Helps monitor costs with paid providers."> Session: 0 • Today: 0</footer>
   </section>
 
   <section id="notes" class="tab">
     <div class="note-quick">
-      <textarea id="noteBody" placeholder="What did you just learn?"></textarea>
+      <div class="note-field">
+        <label for="noteProblem">Problem (from failing test)</label>
+        <input id="noteProblem" type="text" placeholder="e.g., Image missing alt attribute">
+      </div>
+      <div class="note-field">
+        <label for="noteInsight">Insight (one sentence learned)</label>
+        <textarea id="noteInsight" rows="2" placeholder="e.g., Alt text describes images for screen readers"></textarea>
+        <small class="char-counter" id="insightCounter">0/120 chars</small>
+      </div>
+      <div class="note-field">
+        <label for="noteSelfCheck">Self-check (yes/no question)</label>
+        <input id="noteSelfCheck" type="text" placeholder="e.g., Does my img have meaningful alt text?">
+      </div>
+      <div class="note-field">
+        <label for="noteBody">Additional thoughts (optional)</label>
+        <textarea id="noteBody" rows="2" placeholder="Extra details or context..."></textarea>
+        <small class="char-counter" id="bodyCounter">0 chars</small>
+      </div>
       <div class="row">
         <input id="noteTags" placeholder="#flexbox #a11y">
-        <button id="saveNote">Save</button>
+        <button id="saveNote">Save Note</button>
+      </div>
+      <div id="qualityNudge" style="display:none;margin-top:8px;padding:8px;background:#fef3c7;border:1px solid #fbbf24;border-radius:4px;font-size:12px;color:#78350f;">
+        💡 <strong>Tip:</strong> Keep it punchy. Try 1 sentence for insight + 1 for self-check.
       </div>
     </div>
     <input id="noteSearch" placeholder="Search notes">
@@ -95,11 +125,9 @@
       <label>Model
         <select id="groqModel">
           <option value="llama-3.1-8b-instant" selected>llama-3.1-8b-instant (fast, free tier)</option>
-          <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile (powerful)</option>
-          <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (long context)</option>
-          <option value="gemma-7b-it">gemma-7b-it (Google model)</option>
-          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (latest)</option>
-          <option value="llama-3.2-90b-text-preview">llama-3.2-90b-text-preview (preview)</option>
+          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (powerful, production)</option>
+          <option value="openai/gpt-oss-120b">gpt-oss-120b (most powerful, production)</option>
+          <option value="openai/gpt-oss-20b">gpt-oss-20b (efficient, production)</option>
         </select>
       </label>
       <div style="margin-top:12px; padding:12px; background:#f0f7ff; border-radius:6px; border:1px solid #b3d9ff;">

@@ -16,11 +16,9 @@ const SUPPORTED_MODELS = new Set([
 
 const GROQ_MODELS = new Set([
   "llama-3.1-8b-instant",
-  "llama-3.1-70b-versatile",
-  "mixtral-8x7b-32768",
-  "gemma-7b-it",
   "llama-3.3-70b-versatile",
-  "llama-3.2-90b-text-preview"
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b"
 ]);
 
 const IGNORABLE_RUNTIME_ERRORS = /(Extension context invalidated|Receiving end does not exist)/i;

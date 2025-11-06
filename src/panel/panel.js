@@ -623,6 +623,65 @@ function highlightCode(code, lang = 'html') {
   return highlighted;
 }
 
+// Session tracking for resurfacing
+const surfacedThisSession = new Map(); // conceptId -> lastShownAt
+
+async function checkForResurfaceableNotes(ctx) {
+  if (!ctx || !ctx.failingTests || ctx.failingTests.length === 0) {
+    document.getElementById('resurfaceBanner').style.display = 'none';
+    return;
+  }
+  
+  const conceptId = conceptIdFrom(ctx.failingTests[0]);
+  if (!conceptId) {
+    document.getElementById('resurfaceBanner').style.display = 'none';
+    return;
+  }
+  
+  // Check if already shown this session
+  if (surfacedThisSession.has(conceptId)) {
+    const lastShown = surfacedThisSession.get(conceptId);
+    const timeSince = Date.now() - lastShown;
+    // Don't show again for at least 5 minutes
+    if (timeSince < 5 * 60 * 1000) {
+      return;
+    }
+  }
+  
+  // Find matching notes older than 24h
+  const notes = await notesApi.list();
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const matchingNotes = notes.filter(n => 
+    n.conceptId === conceptId && 
+    n.createdAt < oneDayAgo
+  );
+  
+  if (matchingNotes.length > 0) {
+    const banner = document.getElementById('resurfaceBanner');
+    const message = document.getElementById('resurfaceMessage');
+    
+    message.textContent = `You saved ${matchingNotes.length} tip${matchingNotes.length > 1 ? 's' : ''} on #${conceptId} — want to review?`;
+    banner.style.display = 'block';
+    
+    // Mark as surfaced
+    surfacedThisSession.set(conceptId, Date.now());
+    
+    // Set up handlers
+    document.getElementById('resurfaceOpen').onclick = () => {
+      document.querySelector('[data-tab="notes"]').click();
+      noteSearch.value = `#${conceptId}`;
+      renderList(noteSearch.value);
+      banner.style.display = 'none';
+    };
+    
+    document.getElementById('resurfaceDismiss').onclick = () => {
+      banner.style.display = 'none';
+    };
+  } else {
+    document.getElementById('resurfaceBanner').style.display = 'none';
+  }
+}
+
 function renderContext(ctx) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString();
@@ -636,8 +695,12 @@ function renderContext(ctx) {
   if (!ctx) {
     ctxEl.textContent = "Waiting for page context...\n\nMake sure you're on a freeCodeCamp challenge page.";
     ctxEl.classList.remove('flash');
+    document.getElementById('resurfaceBanner').style.display = 'none';
     return;
   }
+  
+  // Check for resurfaceable notes
+  checkForResurfaceableNotes(ctx);
 
   // Build HTML with syntax highlighting
   let html = '';
@@ -781,7 +844,9 @@ const answerEl = document.getElementById('answer');
 const tokenBar = document.getElementById('tokenBar');
 
 function escapeHTML(str) {
-  return (str || "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 function tonePill() {
@@ -881,12 +946,20 @@ function renderTutor(obj, context = null) {
         <div class="editor-code">${selfCheckMarkup}</div>
       </div>
       ${glimpse}
+      <button id="saveFromTutor" style="margin-top:12px;padding:8px 16px;background:#10b981;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;width:100%;">💾 Save as Note</button>
     </div>`;
+  
+  // Add click handler for "Save as Note" button
+  const saveBtn = document.getElementById('saveFromTutor');
+  if (saveBtn) {
+    saveBtn.onclick = () => saveNoteFromTutor(obj, ctx);
+  }
 }
 
 async function refreshTokenBar(){
   const t = await tokens.get();
-  tokenBar.textContent = `Session: ${t.session} • Today: ${t.today}`;
+  const format = (n) => n >= 1000 ? `${(n/1000).toFixed(1)}k` : n;
+  tokenBar.innerHTML = `💬 <span style="opacity:0.7">API Usage:</span> Session: <strong>${format(t.session)}</strong> • Today: <strong>${format(t.today)}</strong>`;
 }
 refreshTokenBar();
 
@@ -947,9 +1020,66 @@ document.getElementById('savePrefs').onclick = async ()=>{
 
 // Notes wiring
 const noteBody = document.getElementById('noteBody');
+const noteProblem = document.getElementById('noteProblem');
+const noteInsight = document.getElementById('noteInsight');
+const noteSelfCheck = document.getElementById('noteSelfCheck');
 const noteTags = document.getElementById('noteTags');
 const noteList = document.getElementById('noteList');
 const noteSearch = document.getElementById('noteSearch');
+const insightCounter = document.getElementById('insightCounter');
+const bodyCounter = document.getElementById('bodyCounter');
+
+// Save note directly from tutor answer
+async function saveNoteFromTutor(tutorObj, context) {
+  const failingTests = context?.failingTests || context?.tests || [];
+  const problem = failingTests[0] || '';
+  
+  // Combine diagnosis and why as insight
+  const diagnosisPart = tutorObj.diagnosis || '';
+  const whyPart = tutorObj.why_it_happens || '';
+  const insight = [diagnosisPart, whyPart].filter(Boolean).join(' ').trim();
+  
+  const selfCheck = tutorObj.self_check || '';
+  const auto = autoTagsFromContext(context);
+  
+  // Generate conceptId from problem
+  const conceptId = conceptIdFrom(problem);
+  
+  const note = {
+    id: crypto.randomUUID(),
+    title: context?.title || 'freeCodeCamp',
+    fields: {
+      problem,
+      insight: insight.slice(0, 200), // Truncate to reasonable length
+      selfCheck
+    },
+    body: '',
+    conceptId,
+    tags: auto,
+    lesson: context,
+    source: {
+      type: 'tutor',
+      title: context?.title || '',
+      url: context?.url || ''
+    },
+    createdAt: Date.now()
+  };
+  
+  await notesApi.add(note);
+  
+  // Switch to Notes tab to show the saved note
+  document.querySelector('[data-tab="notes"]').click();
+  await renderList();
+  
+  // Show success feedback
+  const status = document.getElementById('status');
+  status.textContent = '✓ Note saved!';
+  status.style.color = '#10b981';
+  setTimeout(() => {
+    status.textContent = 'ready';
+    status.style.color = '';
+  }, 2000);
+}
 
 function parseTags(raw){
   return (raw||'')
@@ -959,42 +1089,268 @@ function parseTags(raw){
     .map(t=> t.startsWith('#') ? t : `#${t.toLowerCase()}`);
 }
 
+// Generate concept ID from failing test text or problem
+function conceptIdFrom(text) {
+  if (!text) return null;
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 5)
+    .join('-');
+}
+
+// Character counter updates
+if (noteInsight) {
+  noteInsight.oninput = () => {
+    const len = noteInsight.value.length;
+    insightCounter.textContent = `${len}/120 chars`;
+    insightCounter.classList.toggle('warning', len > 120);
+  };
+}
+if (noteBody) {
+  noteBody.oninput = () => {
+    const len = noteBody.value.length;
+    bodyCounter.textContent = `${len} chars`;
+    bodyCounter.classList.toggle('warning', len > 280);
+    
+    // Show quality nudge if body is too long
+    const nudge = document.getElementById('qualityNudge');
+    if (nudge) {
+      nudge.style.display = len > 280 ? 'block' : 'none';
+    }
+  };
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + Shift + N to open note composer
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+    e.preventDefault();
+    document.querySelector('[data-tab="notes"]').click();
+    
+    // Pre-fill from current context
+    if (currentContext) {
+      if (currentContext.failingTests && currentContext.failingTests.length > 0) {
+        noteProblem.value = currentContext.failingTests[0];
+      }
+      // Auto-fill tags
+      const autoTags = autoTagsFromContext(currentContext);
+      if (autoTags.length > 0) {
+        noteTags.value = autoTags.join(' ');
+      }
+    }
+    
+    // Focus insight field
+    noteInsight.focus();
+  }
+});
+
+// Snippet expansion
+function handleSnippetExpansion(textarea) {
+  const text = textarea.value;
+  const cursorPos = textarea.selectionStart;
+  
+  const snippets = {
+    '//tn:gotcha': 'Gotcha: ',
+    '//tn:check': 'Self-check: '
+  };
+  
+  for (const [trigger, expansion] of Object.entries(snippets)) {
+    const triggerPos = text.lastIndexOf(trigger, cursorPos);
+    if (triggerPos !== -1 && triggerPos + trigger.length === cursorPos) {
+      const before = text.substring(0, triggerPos);
+      const after = text.substring(cursorPos);
+      textarea.value = before + expansion + after;
+      textarea.selectionStart = textarea.selectionEnd = before.length + expansion.length;
+      return;
+    }
+  }
+}
+
+if (noteInsight) {
+  noteInsight.addEventListener('input', (e) => {
+    handleSnippetExpansion(e.target);
+  });
+}
+if (noteBody) {
+  noteBody.addEventListener('input', (e) => {
+    handleSnippetExpansion(e.target);
+  });
+}
+
 async function renderList(filter=''){
   const q = filter.toLowerCase();
-  const arr = await notesApi.list();
-  const filtered = q ? arr.filter(n =>
-    (n.body.toLowerCase().includes(q) || n.tags.join(' ').toLowerCase().includes(q))
-  ) : arr;
+  let arr = await notesApi.list();
+  
+  // Migrate legacy notes on first render
+  let needsSave = false;
+  arr = arr.map(n => {
+    if (!n.fields && n.body) {
+      needsSave = true;
+      return {
+        ...n,
+        fields: {
+          problem: '',
+          insight: n.body,
+          selfCheck: ''
+        },
+        body: ''
+      };
+    }
+    return n;
+  });
+  if (needsSave) {
+    await notesApi.saveAll(arr);
+  }
+  
+  const filtered = q ? arr.filter(n => {
+    const searchText = [
+      n.fields?.problem || '',
+      n.fields?.insight || '',
+      n.fields?.selfCheck || '',
+      n.body || '',
+      n.tags.join(' ')
+    ].join(' ').toLowerCase();
+    return searchText.includes(q);
+  }) : arr;
 
   noteList.innerHTML = '';
   filtered.forEach(n=>{
     const li = document.createElement('li');
+    const fields = n.fields || {};
+    const problemHtml = fields.problem ? `<div><strong>Problem:</strong> ${escapeHTML(fields.problem)}</div>` : '';
+    const insightHtml = fields.insight ? `<div><strong>Insight:</strong> ${escapeHTML(fields.insight)}</div>` : '';
+    
+    // Render self-check as interactive checkbox if present
+    const checkDone = n.checklist?.done || false;
+    const checkStyle = checkDone ? 'text-decoration:line-through;color:#10b981;' : '';
+    const selfCheckHtml = fields.selfCheck ? `
+      <div style="margin-top:6px;display:flex;align-items:start;gap:8px;">
+        <input type="checkbox" 
+               class="self-check-box" 
+               data-note-id="${n.id}" 
+               ${checkDone ? 'checked' : ''}
+               style="margin-top:3px;">
+        <div style="${checkStyle}"><strong>Self-check:</strong> ${escapeHTML(fields.selfCheck)}</div>
+      </div>` : '';
+    
+    const bodyHtml = n.body ? `<div class="muted" style="margin-top:8px;">${escapeHTML(n.body)}</div>` : '';
+    const conceptBadge = n.conceptId ? `<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;margin-left:8px;">#${n.conceptId}</span>` : '';
+    const sourceBadge = n.source ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;margin-left:4px;">from ${n.source.type}</span>` : '';
+    const completeBadge = checkDone ? `<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:4px;margin-left:4px;">✓ done</span>` : '';
+    
+    // Find related notes with same conceptId
+    let relatedHtml = '';
+    if (n.conceptId) {
+      const related = arr.filter(other => 
+        other.id !== n.id && 
+        other.conceptId === n.conceptId
+      );
+      if (related.length > 0) {
+        const relatedList = related.slice(0, 3).map(r => 
+          `<div style="font-size:11px;padding:4px 0;">→ ${escapeHTML(r.fields?.insight || r.body || 'Note').slice(0, 60)}...</div>`
+        ).join('');
+        relatedHtml = `
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">
+            <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;">Related notes (${related.length}):</div>
+            ${relatedList}
+          </div>`;
+      }
+    }
+    
     li.innerHTML = `
-      <label>
-        <input type="checkbox" class="pick">
-        <b>${n.title||'Note'}</b>
-        <div class="muted">${n.tags.join(' ')}</div>
-        <div>${n.body}</div>
-        <div class="muted">${n.lesson?.title||''}</div>
-      </label>`;
+      <div style="display:block;padding:8px;border:1px solid #eee;border-radius:4px;margin-bottom:8px;">
+        <label style="display:inline-flex;align-items:center;">
+          <input type="checkbox" class="pick">
+          <div><b>${n.title||'Note'}</b>${conceptBadge}${sourceBadge}${completeBadge}</div>
+        </label>
+        <div class="muted" style="margin:4px 0;">${n.tags.join(' ')}</div>
+        ${problemHtml}
+        ${insightHtml}
+        ${selfCheckHtml}
+        ${bodyHtml}
+        <div class="muted" style="font-size:11px;margin-top:4px;">${n.lesson?.title||''}</div>
+        ${relatedHtml}
+      </div>`;
     noteList.appendChild(li);
+  });
+  
+  // Add event listeners for self-check checkboxes
+  noteList.querySelectorAll('.self-check-box').forEach(checkbox => {
+    checkbox.addEventListener('change', async (e) => {
+      const noteId = e.target.dataset.noteId;
+      const checked = e.target.checked;
+      
+      // Update note in storage
+      const allNotes = await notesApi.list();
+      const updated = allNotes.map(n => {
+        if (n.id === noteId) {
+          return {
+            ...n,
+            checklist: { done: checked },
+            updatedAt: Date.now()
+          };
+        }
+        return n;
+      });
+      
+      await notesApi.saveAll(updated);
+      await renderList(noteSearch.value);
+    });
   });
 }
 
 document.getElementById('saveNote').onclick = async ()=>{
-  const tags = parseTags(noteTags.value) ;
+  const problem = noteProblem.value.trim();
+  const insight = noteInsight.value.trim();
+  const selfCheck = noteSelfCheck.value.trim();
+  const body = noteBody.value.trim();
+  
+  // Require at least insight to save
+  if (!insight && !body) {
+    alert('Please add at least an insight or note body');
+    return;
+  }
+  
+  const tags = parseTags(noteTags.value);
   const auto = autoTagsFromContext(currentContext);
+  
+  // Generate conceptId from problem or first failing test
+  let conceptId = null;
+  if (problem) {
+    conceptId = conceptIdFrom(problem);
+  } else if (currentContext?.failingTests?.length > 0) {
+    conceptId = conceptIdFrom(currentContext.failingTests[0]);
+  }
+  
   const note = {
     id: crypto.randomUUID(),
     title: currentContext?.title || 'freeCodeCamp',
-    body: noteBody.value.trim(),
+    fields: {
+      problem,
+      insight,
+      selfCheck
+    },
+    body,
+    conceptId,
     tags: Array.from(new Set([...tags, ...auto])),
     lesson: currentContext,
     createdAt: Date.now()
   };
-  if (!note.body) return;
+  
   await notesApi.add(note);
-  noteBody.value = ''; noteTags.value = '';
+  
+  // Clear form
+  noteProblem.value = '';
+  noteInsight.value = '';
+  noteSelfCheck.value = '';
+  noteBody.value = '';
+  noteTags.value = '';
+  insightCounter.textContent = '0/120 chars';
+  bodyCounter.textContent = '0 chars';
+  
   await renderList(noteSearch.value);
 };
 

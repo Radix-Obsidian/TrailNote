@@ -36,6 +36,15 @@
   },
   "action": {
     "default_title": "Open TrailNote"
+  },
+  "commands": {
+    "open-note-composer": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+N",
+        "mac": "Command+Shift+N"
+      },
+      "description": "Quick note capture"
+    }
   }
 }
 
