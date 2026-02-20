@@ -1,0 +1,195 @@
+/**
+ * TrailNote Intelligence Status Styles
+ * Sidebar widget and modal styles for the Pedagogical Intelligence Engine
+ */
+
+/* === Intelligence Status Widget === */
+#intelligenceStatus {
+  margin: var(--space-3) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 36px;
+}
+
+.intel-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: var(--font-size-xs);
+}
+
+.intel-label {
+  color: var(--color-gray-500);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+}
+
+.intel-value {
+  color: var(--color-gray-700);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+}
+
+.intel-stat.intel-alert .intel-label {
+  color: var(--color-warning, #d97706);
+}
+
+.intel-stat.intel-alert .intel-value {
+  color: var(--color-warning, #d97706);
+  font-weight: 700;
+}
+
+.intel-stat.intel-alert {
+  background: rgba(251, 191, 36, 0.08);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+/* === BKT Mastery Badge in Answer Card === */
+.bkt-mastery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.bkt-mastery-badge.low {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.bkt-mastery-badge.medium {
+  background: rgba(251, 191, 36, 0.15);
+  color: #b45309;
+}
+
+.bkt-mastery-badge.high {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+/* === Memory Rule Approval Modal === */
+.memory-approval-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+.memory-approval-inner {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.2s ease;
+}
+
+.memory-approval-item {
+  border: 1px solid var(--color-gray-200);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+}
+
+.memory-approval-item:hover {
+  border-color: var(--color-primary-300, #c4b5fd);
+}
+
+.memory-approval-key {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--color-gray-800);
+  text-transform: capitalize;
+}
+
+.memory-approval-value {
+  font-size: 12px;
+  color: var(--color-gray-600);
+  margin-bottom: 6px;
+  font-family: var(--font-family-mono, monospace);
+  word-break: break-all;
+}
+
+.memory-approval-confidence {
+  font-size: 11px;
+  color: var(--color-gray-400);
+  margin-bottom: 10px;
+}
+
+/* === Velocity Blocker Alert === */
+.velocity-blocker-alert {
+  padding: var(--space-3);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  margin-bottom: var(--space-3);
+}
+
+.velocity-blocker-title {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+  color: #b45309;
+}
+
+/* === Hint Intervention Style Tag === */
+.intervention-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: capitalize;
+  margin-left: var(--space-2);
+  vertical-align: middle;
+  background: rgba(124, 58, 237, 0.1);
+  color: var(--color-primary-700, #6d28d9);
+}
+
+/* === Review Due Badge === */
+.review-due-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

@@ -3,6 +3,8 @@
 
 import { store } from "./storage.js";
 import { tokens } from "./tokens.js";
+import { bktEngine } from "./bkt-engine.js";
+import { pedagogicalEngine } from "./pedagogical-engine.js";
 
 // Import modules dynamically for browser environment
 let guardrailSystem;
@@ -32,6 +34,17 @@ if (typeof window !== 'undefined') {
     console.log('[HintHopper] A/B testing framework loaded');
   }).catch(err => {
     console.error('[HintHopper] Failed to load A/B testing framework:', err);
+  });
+}
+
+// Import Intelligence Hub
+let intelligenceHub;
+if (typeof window !== 'undefined') {
+  import('./intelligence-hub.js').then(module => {
+    intelligenceHub = module.hub;
+    console.log('[HintHopper] Intelligence Hub loaded');
+  }).catch(err => {
+    console.warn('[HintHopper] Intelligence Hub not loaded (non-critical):', err);
   });
 }
 
@@ -113,9 +126,12 @@ async function sanitizeStructuredResponse(obj, strict, context) {
   return clone;
 }
 
-function buildSystemPrompt(tone) {
+function buildSystemPrompt(tone, bktDirective = '', misconceptionHint = '') {
   const toneKey = MODE_TONE[tone] ? tone : "nudge";
-  return `${SYS_BASE}\nTone: ${MODE_TONE[toneKey]}`;
+  let prompt = `${SYS_BASE}\nTone: ${MODE_TONE[toneKey]}`;
+  if (bktDirective) prompt += `\n${bktDirective}`;
+  if (misconceptionHint) prompt += `\n${misconceptionHint}`;
+  return prompt;
 }
 
 function makeUserPrompt(mode, context, ruleHints, toneSetting) {
@@ -134,23 +150,6 @@ function makeUserPrompt(mode, context, ruleHints, toneSetting) {
   }
   
   return userPrompt;
-    ? "Focus on questions that lead the learner instead of statements."
-    : tone === "study"
-      ? "Include a short mini-lesson of at most 3 bullets." : "";
-
-  return `${SCHEMA}
-Context:
-Title: ${ctx?.title || 'unknown'}
-URL: ${ctx?.url || ''}
-${instruction}
-Failing tests:
-${tests || '- none captured'}
-User code (excerpt, redacted if needed):
-${codeExcerpt || '- none'}
-${ruleTip}
-
-Task: ${task}${toneAside ? ` ${toneAside}` : ''}
-`;
 }
 
 function ensureStepsArray(value) {
@@ -448,6 +447,7 @@ async function callOllama(ollamaUrl, model, messages){
     model: model,
     rawMessage
   };
+}
 
 export async function tutorAnswer(mode, context, tone = "nudge") {
   const provider = await store.get('llmProvider', 'openai');
@@ -502,7 +502,7 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   }
 
   const toneSetting = MODE_TONE[tone] ? tone : 'nudge';
-  const ruleHints = context.ruleHints || '';
+  let ruleHints = context.ruleHints || '';
   
   // Generate test fingerprint for potential A/B testing
   let testFingerprint = null;
@@ -545,6 +545,28 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   const promptType = context.promptType;
   const userQuery = context.userQuery;
   const challengeType = context.challengeType;
+
+  // Query intelligence hub for intervention style and rule enrichment
+  let hubEnrichment = { interventionStyle: null, ruleAdditions: '' };
+  if (intelligenceHub) {
+    try {
+      const conceptId = context.challengeId ||
+        (userQuery ? userQuery.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 30) : null);
+      hubEnrichment = await intelligenceHub.beforeHint({
+        conceptId,
+        userQuery,
+        userCode,
+        failingTests,
+        challengeId: context.challengeId,
+        struggleData: context.struggleData || { struggleLevel: context.struggleLevel || 'none' }
+      });
+      if (hubEnrichment.ruleAdditions) {
+        ruleHints = ruleHints ? `${ruleHints} ${hubEnrichment.ruleAdditions}` : hubEnrichment.ruleAdditions;
+      }
+    } catch (e) {
+      console.warn('[HintHopper] Hub beforeHint error (non-critical):', e);
+    }
+  }
 
   let variantType = "default"; // Default variant
   let enhancedQuery = userQuery;
@@ -590,6 +612,44 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
     }
   }
 
+  // === BKT-gated tone directive ===
+  let bktDirective = '';
+  let misconceptionHint = '';
+  try {
+    await bktEngine.init();
+    const conceptIdForBkt = context.challengeId ||
+      (context.title ? context.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 30) : null);
+    if (conceptIdForBkt) {
+      const pL = bktEngine.getMastery(conceptIdForBkt);
+      if (pL < 0.30) {
+        bktDirective = 'Learner mastery is LOW — use a scaffolded, step-by-step approach with direct guidance.';
+      } else if (pL > 0.70) {
+        bktDirective = 'Learner mastery is HIGH — use a Socratic approach with probing questions to stretch their thinking.';
+      }
+      console.log(`[TrailNote] BKT P(L) for ${conceptIdForBkt}: ${pL.toFixed(3)} → directive: "${bktDirective || 'default'}"`); 
+    }
+  } catch (bktErr) {
+    console.warn('[TrailNote] BKT directive error (non-critical):', bktErr);
+  }
+
+  // === Misconception detection ===
+  try {
+    if (pedagogicalEngine && pedagogicalEngine.detectMisconception) {
+      const detected = await pedagogicalEngine.detectMisconception(
+        context.userCode || '',
+        context.tests || context.failingTests || []
+      );
+      if (detected && detected.id !== 'unknown' && detected.confidence > 0.5) {
+        misconceptionHint = `Suspected issue: ${detected.name}. Focus the hint on ${detected.relatedConcepts[0] || detected.id}.`;
+        console.log(`[TrailNote] Misconception detected: ${detected.name} (confidence: ${detected.confidence})`);
+        // Attach to context so the panel can render the misconception chip
+        context._detectedMisconception = { name: detected.name, id: detected.id };
+      }
+    }
+  } catch (miscErr) {
+    console.warn('[TrailNote] Misconception detection error (non-critical):', miscErr);
+  }
+
   // Create the prompt, potentially using the A/B variant
   let userPrompt, systemPromptContent;
 
@@ -602,11 +662,11 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
     // Use the variant's system prompt if available
     systemPromptContent = abVariant.systemPrompt ?
       `${SYS_BASE}\nTone: ${MODE_TONE[toneSetting]}\n${abVariant.systemPrompt}` :
-      buildSystemPrompt(toneSetting);
+      buildSystemPrompt(toneSetting, bktDirective, misconceptionHint);
   } else {
     // Use standard prompts
     userPrompt = makeUserPrompt(mode, context, ruleHints, toneSetting);
-    systemPromptContent = buildSystemPrompt(toneSetting);
+    systemPromptContent = buildSystemPrompt(toneSetting, bktDirective, misconceptionHint);
   }
   
   const messages = [
@@ -663,6 +723,10 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
       }
     }
     
+    // Notify intelligence hub
+    if (intelligenceHub && hintId) {
+      intelligenceHub.afterHint(hintId, canned, context).catch(() => {});
+    }
     return await sanitizeStructuredResponse(canned, hintMode === 'strict', context);
   }
 
@@ -682,6 +746,10 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   
   const parsed = parseTutorJson(result.content, result.rawMessage?.tool_calls);
   const sanitized = await sanitizeStructuredResponse(parsed, hintMode === 'strict', context);
+  // Carry detected misconception forward to the panel
+  if (context._detectedMisconception) {
+    sanitized.misconception = context._detectedMisconception;
+  }
   
   // Track LLM hint in outcome data
   if (outcomeTracker) {
@@ -699,6 +767,11 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
     } catch (error) {
       console.warn('[HintHopper] Error tracking hint:', error);
     }
+  }
+
+  // Notify intelligence hub after hint delivery
+  if (intelligenceHub && hintId) {
+    intelligenceHub.afterHint(hintId, sanitized, context).catch(() => {});
   }
 
   // Emit debug info if debug mode is enabled

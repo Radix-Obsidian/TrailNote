@@ -181,6 +181,14 @@ export class StruggleDetector {
     }
     
     const message = this.getEncouragementMessage(level);
+
+    // Notify Intelligence Hub when struggle level changes (fire-and-forget)
+    if (typeof window !== 'undefined' && level !== this.state.lastStruggleLevel) {
+      import('./intelligence-hub.js').then(({ hub }) => {
+        hub.onStruggle(level).catch(() => {});
+      }).catch(() => {});
+    }
+
     this.state.lastStruggleLevel = level;
     
     return {

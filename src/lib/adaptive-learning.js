@@ -4,7 +4,7 @@
  */
 
 import { conceptGraph } from './concept-graph.js';
-import { store } from './store.js';
+import { store } from './storage.js';
 import { struggleDetector } from './struggle-detector.js';
 
 // Store key for adaptive learning data

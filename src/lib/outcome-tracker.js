@@ -161,6 +161,13 @@ export const outcomeTracker = {
         conceptKey: hint.conceptKey,
         passedWithin10m: hint.passedWithin10m
       });
+
+      // Notify Intelligence Hub for feedback loop processing
+      if (typeof window !== 'undefined') {
+        import('./intelligence-hub.js').then(({ hub }) => {
+          hub.onOutcome(hintId, 'passed', timeToPass, hint.conceptKey).catch(() => {});
+        }).catch(() => {});
+      }
     }
   },
   

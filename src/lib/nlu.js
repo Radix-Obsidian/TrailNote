@@ -4,7 +4,7 @@
  */
 
 import { conceptGraph } from './concept-graph.js';
-import { store } from './store.js';
+import { store } from './storage.js';
 
 // Store key for NLU data
 const NLU_STORE_KEY = 'hinthopper:nlu_data';

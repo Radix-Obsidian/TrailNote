@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "HintHopper",
-  "version": "0.2.0",
-  "description": "Hop to the hint: AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.",
+  "name": "TrailNote Agent Builder",
+  "version": "3.0.0",
+  "description": "Zero-to-one platform for building autonomous AI agents without coding. Create, deploy, and run agents that perceive, reason, and act.",
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -35,15 +35,15 @@
     "default_path": "src/panel/panel-v2.html"
   },
   "action": {
-    "default_title": "Open TrailNote"
+    "default_title": "Open TrailNote Agent Builder"
   },
   "commands": {
-    "open-note-composer": {
+    "open-agent-designer": {
       "suggested_key": {
-        "default": "Ctrl+Shift+N",
-        "mac": "Command+Shift+N"
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
       },
-      "description": "Quick note capture"
+      "description": "Open Agent Designer"
     }
   }
 }

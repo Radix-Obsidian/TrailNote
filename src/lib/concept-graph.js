@@ -240,6 +240,14 @@ export const conceptGraph = {
     masteryData[conceptId].lastViewedAt = now;
     
     await store.set(MASTERY_STORE_KEY, masteryData);
+
+    // Notify Intelligence Hub (fire-and-forget)
+    if (typeof window !== 'undefined') {
+      import('./intelligence-hub.js').then(({ hub }) => {
+        hub.onConceptViewed(conceptId).catch(() => {});
+      }).catch(() => {});
+    }
+
     return masteryData[conceptId];
   },
   
@@ -263,6 +271,13 @@ export const conceptGraph = {
     masteryData[conceptId].lastPassedAt = now;
     masteryData[conceptId].lastViewedAt = now;
     
+    // Notify Intelligence Hub (fire-and-forget)
+    if (typeof window !== 'undefined') {
+      import('./intelligence-hub.js').then(({ hub }) => {
+        hub.onConceptPassed(conceptId).catch(() => {});
+      }).catch(() => {});
+    }
+
     // Update streak
     const daysSinceLastPass = masteryData[conceptId].lastPassedAt ? 
       (now - masteryData[conceptId].lastPassedAt) / (1000 * 60 * 60 * 24) : 
@@ -340,8 +355,10 @@ export const conceptGraph = {
    * @return {Array} Array of concept objects with scores and reasons
    */
   async getNextConcepts(count = 3, useAdaptiveLearning = true) {
+    // Get mastery data needed by scoring helpers
+    const mastery = await this.getAllMastery();
     // Get initial candidates from building function
-    const candidates = await this._buildLearningPathCandidates();
+    const candidates = await this._buildLearningPathCandidates(mastery);
     
     // If adaptive learning module is available and enabled, use it for recommendations
     if (useAdaptiveLearning) {
@@ -385,19 +402,14 @@ export const conceptGraph = {
     
     // Calculate advanced recommendation scores (standard approach)
     for (let candidate of candidates) {
-      candidate.score = await this._calculateAdvancedRecommendationScore(candidate);
-      candidate.reason = await this._getRecommendationReason(candidate);
+      candidate.score = this._calculateAdvancedRecommendationScore(candidate, mastery);
+      candidate.reason = this._getRecommendationReason(candidate, mastery);
     }
     
     // Sort by score (highest first) and take requested count
     return candidates
       .sort((a, b) => b.score - a.score)
       .slice(0, count);
-  },
-        ...masteryInfo,
-        recommendationReason: this._getRecommendationReason(concept, mastery)
-      };
-    });
   },
   
   /**
@@ -557,6 +569,11 @@ export const conceptGraph = {
     return 'Recommended for your learning path';
   },
   
+  // Alias for getGraph() — used by nlu.js, adaptive-learning.js, and other modules
+  async getAllConcepts() {
+    return await this.getGraph();
+  },
+
   // Get all related concepts (prerequisites and dependents)
   async getRelatedConcepts(conceptId) {
     const graph = await this.getGraph();

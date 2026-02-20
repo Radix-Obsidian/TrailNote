@@ -1,12 +1,16 @@
 /**
- * TrailNote Panel v2.0
- * Main controller for the redesigned UI
+ * TrailNote Agent Builder Panel v3.0
+ * Main controller for the Agent Builder UI
+ * Pivoted from learning/note-taking to AI agent creation platform
  */
 
 import { store, notesApi } from '../lib/storage.js';
-import { tutorAnswer } from '../lib/tutor.js';
 import { initChat } from './v2/chat.js';
-import { struggleDetector } from '../lib/struggle-detector.js';
+import { initAgentDesigner, renderAgentGallery } from './v2/agent-designer.js';
+import { agentBuilder } from '../lib/agent-builder.js';
+import { hub as intelligenceHub } from '../lib/intelligence-hub.js';
+import { bktEngine } from '../lib/bkt-engine.js';
+import { learningVelocity } from '../lib/learning-velocity.js';
 
 // Tone label map (defined locally, not exported from tutor.js)
 const toneLabelMap = {
@@ -19,6 +23,8 @@ const toneLabelMap = {
 let currentContext = null;
 let currentTone = 'nudge';
 let chat = null;
+let lastConceptId = null;   // Tracks the concept for the most recent hint (for BKT wiring)
+let lastHintRequestTime = null; // Tracks when the last hint was requested (for velocity)
 
 // Import outcome tracker once it's loaded
 let outcomeTracker;
@@ -46,18 +52,14 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Import flashcard manager module
-let flashcardManager;
+// Import knowledge graph view (renamed from mastery view)
+let knowledgeGraphView;
 if (typeof window !== 'undefined') {
-  import('./v2/flashcard-manager.js').then(module => {
-    flashcardManager = module.default;
-    console.log('[HintHopper] Flashcard manager loaded');
-    // Initialize flashcards if we're already loaded
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      initFlashcards();
-    }
+  import('./v2/mastery-view.js').then(module => {
+    knowledgeGraphView = module.default;
+    console.log('[TrailNote] Knowledge graph view loaded');
   }).catch(err => {
-    console.error('[HintHopper] Failed to load flashcard manager:', err);
+    console.error('[TrailNote] Failed to load knowledge graph view:', err);
   });
 }
 
@@ -78,18 +80,38 @@ if (typeof window !== 'undefined') {
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[TrailNote] Initializing Agent Builder...');
   await initSettings();
   await initNavigation();
   await initChatInterface();
-  await initBunji();
-  await initNotes();
-  await initStruggleDetection();
-  await initMasteryView();
-  await initFlashcards();
-  await initAnalyticsView();
-  await initAdaptiveLearning();
-  await initNLU();
+  await initAgentBuilder();
+  await initAgentMemory();
+  await initKnowledgeGraph();
+  await initAgentActivity();
   requestContextRefresh();
+
+  // Initialize BKT engine (non-blocking)
+  bktEngine.init().catch(e => console.warn('[TrailNote] BKT init error:', e));
+
+  // Initialize Learning Velocity and show review pill if concepts are due
+  learningVelocity.init().then(async () => {
+    await updateReviewDuePill();
+  }).catch(e => console.warn('[TrailNote] LearningVelocity init error:', e));
+
+  // Initialize Intelligence Hub (non-blocking)
+  intelligenceHub.init().then(() => {
+    console.log('[TrailNote] Intelligence Hub ready');
+    renderIntelligenceStatus();
+    // Listen for pending memory approvals
+    intelligenceHub.on('pending_approvals', ({ count }) => {
+      showPendingApprovalsNotification(count);
+    });
+    intelligenceHub.on('velocity_blockers', ({ blockers }) => {
+      if (blockers.length > 0 && blockers[0].severity > 0.7) {
+        showNotification(`Velocity blocker: ${blockers[0].description}`, 'warning');
+      }
+    });
+  }).catch(e => console.warn('[TrailNote] Intelligence Hub init error (non-critical):', e));
 });
 
 // === Settings Management ===
@@ -283,9 +305,11 @@ async function refreshOllamaModels() {
 async function initNavigation() {
   const navItems = document.querySelectorAll('.nav-item[data-view]');
   const views = {
-    bunji: document.getElementById('bunjiView'),
-    notes: document.getElementById('notesView'),
-    settings: document.getElementById('settingsView')
+    'agent-designer': document.getElementById('agent-designerView'),
+    'agent-memory': document.getElementById('agent-memoryView'),
+    'knowledge-graph': document.getElementById('knowledge-graphView'),
+    'analytics': document.getElementById('analyticsView'),
+    'settings': document.getElementById('settingsView')
   };
   
   navItems.forEach(item => {
@@ -297,12 +321,16 @@ async function initNavigation() {
       item.classList.add('active');
       
       // Show corresponding view
-      Object.values(views).forEach(v => v.style.display = 'none');
-      views[view].style.display = 'block';
+      Object.values(views).forEach(v => { if (v) v.style.display = 'none'; });
+      if (views[view]) views[view].style.display = 'block';
       
       // Special actions per view
-      if (view === 'notes') {
-        renderList();
+      if (view === 'agent-memory') {
+        renderMemoryList();
+      } else if (view === 'knowledge-graph') {
+        initKnowledgeGraphView();
+      } else if (view === 'analytics') {
+        initAgentActivityView();
       }
     });
   });
@@ -326,8 +354,8 @@ async function initNavigation() {
     overlay.classList.remove('visible');
   });
   
-  // Update notes count
-  updateNotesCount();
+  // Update memory count
+  updateMemoryCount();
 }
 
 function toggleAssistant() {
@@ -335,9 +363,9 @@ function toggleAssistant() {
   assistant.classList.toggle('collapsed');
 }
 
-async function updateNotesCount() {
+async function updateMemoryCount() {
   const notes = await notesApi.list();
-  const badge = document.getElementById('notesCount');
+  const badge = document.getElementById('memoryCount');
   if (badge) {
     badge.textContent = notes.length;
     badge.style.display = notes.length > 0 ? 'inline-flex' : 'none';
@@ -353,21 +381,98 @@ async function initChatInterface() {
   });
 }
 
-// === Bunji Integration ===
-async function initBunji() {
-  document.getElementById('btnExplain').addEventListener('click', () => handleBunjiAction('explain'));
-  document.getElementById('btnNudge').addEventListener('click', () => handleBunjiAction('nudge'));
-  document.getElementById('btnConcept').addEventListener('click', () => handleBunjiAction('concept'));
+// === Agent Builder Integration ===
+async function initAgentBuilder() {
+  console.log('[TrailNote] Initializing Agent Builder...');
+  
+  // Initialize agent builder service
+  await agentBuilder.init();
+  
+  // Render the agent gallery
+  const container = document.getElementById('agentDesignerContent');
+  if (container) {
+    await initAgentDesigner(container);
+  }
+}
+
+async function initAgentMemory() {
+  console.log('[TrailNote] Initializing Agent Memory...');
+  // Memory list will be rendered when view is shown
+}
+
+async function initKnowledgeGraph() {
+  console.log('[TrailNote] Initializing Knowledge Graph...');
+  // Will use existing mastery-view.js logic
+}
+
+async function initAgentActivity() {
+  console.log('[TrailNote] Initializing Agent Activity...');
+  // Will use existing analytics-view.js logic
+}
+
+async function renderMemoryList() {
+  const listEl = document.getElementById('memoryList');
+  if (!listEl) return;
+  
+  const notes = await notesApi.list();
+  
+  if (notes.length === 0) {
+    listEl.innerHTML = '<li class="list-item">No memories yet. Run an agent to create memories.</li>';
+    return;
+  }
+  
+  listEl.innerHTML = notes.map(note => `
+    <li class="list-item">
+      <div class="list-item-content">
+        <strong>${escapeHTML(note.problem || note.insight || 'Memory')}</strong>
+        <small>${new Date(note.createdAt).toLocaleDateString()}</small>
+      </div>
+    </li>
+  `).join('');
+}
+
+async function initKnowledgeGraphView() {
+  const container = document.getElementById('knowledgeGraphContent');
+  if (container && knowledgeGraphView) {
+    knowledgeGraphView.init(container);
+  }
+}
+
+async function initAgentActivityView() {
+  const container = document.getElementById('analyticsContent');
+  if (container && analyticsView) {
+    analyticsView.init(container);
+  }
+}
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 async function handleBunjiAction(mode) {
   console.log('[HintHopper] Handling Bunji action:', mode);
   
   if (!currentContext) {
-    console.warn('[HintHopper] No context available for Bunji action');
+    console.warn('[HintHopper] No context available for Bunji action')
     showNotification('Please navigate to a freeCodeCamp challenge first.', 'warning');
     return;
   }
+
+  // Derive concept ID from context for BKT tracking
+  const conceptIdForAction = currentContext.challengeId ||
+    (currentContext.title ? currentContext.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 30) : null);
+
+  // If we already showed a hint for this concept, record a failure signal (user needed another hint)
+  if (lastConceptId && lastConceptId === conceptIdForAction && lastHintRequestTime) {
+    bktEngine.init().then(() => bktEngine.updateMastery(lastConceptId, false)).then(result => {
+      console.log(`[TrailNote] BKT failure recorded for ${lastConceptId}: P(L) = ${result.masteryAfter.toFixed(3)}`);
+    }).catch(e => console.warn('[TrailNote] BKT failure update error:', e));
+  }
+
+  // Set tracking state for this hint request
+  lastConceptId = conceptIdForAction;
+  lastHintRequestTime = Date.now();
   
   // Show debug info about current context
   console.log('[HintHopper] Current context:', {
@@ -381,7 +486,13 @@ async function handleBunjiAction(mode) {
   
   // Track action for struggle detection
   struggleDetector.trackAction(mode, currentContext);
-  checkStruggleLevel();
+  const struggleAnalysis = checkStruggleLevel();
+
+  // Enrich context with struggle level for intelligence hub
+  if (currentContext && struggleAnalysis) {
+    currentContext.struggleLevel = struggleAnalysis.level;
+    currentContext.struggleData = { struggleLevel: struggleAnalysis.level, indicators: struggleAnalysis.indicators };
+  }
   
   // Show answer card
   const answerCard = document.getElementById('answerCard');
@@ -459,6 +570,21 @@ async function renderBunjiAnswer(response, mode) {
   }
   
   let html = `<div class="badge badge-primary" style="margin-bottom: var(--space-3);">${MODE_LABELS[mode] || mode}</div>`;
+
+  // Add BKT mastery badge if intelligence hub is ready
+  if (intelligenceHub.initialized && currentContext) {
+    const conceptId = currentContext.challengeId ||
+      (currentContext.failingTests?.[0] ? currentContext.failingTests[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 30) : null);
+    if (conceptId) {
+      const mastery = intelligenceHub.getMastery(conceptId);
+      if (mastery !== null) {
+        const pct = Math.round(mastery * 100);
+        const tier = mastery < 0.4 ? 'low' : mastery < 0.8 ? 'medium' : 'high';
+        const label = mastery < 0.4 ? 'Learning' : mastery < 0.8 ? 'Progressing' : 'Near Mastery';
+        html += `<span class="bkt-mastery-badge ${tier}">📊 ${label} • ${pct}%</span>`;
+      }
+    }
+  }
   
   // Handle structured response object
   const conceptKey = response.concept_key;
@@ -491,6 +617,11 @@ async function renderBunjiAnswer(response, mode) {
   if (response) {
     // Create a formatted answer from the structured response
     html += `<div style="line-height: var(--line-height-relaxed);">`;
+
+    // Misconception chip (shown when pedagogical engine detects a pattern)
+    if (response.misconception && response.misconception.name) {
+      html += `<span class="misconception-tag" style="display:inline-flex; align-items:center; gap:4px; font-size:var(--font-size-xs); color:var(--color-gray-500); background:var(--color-gray-100); border:1px solid var(--color-gray-200); border-radius:12px; padding:2px 8px; margin-bottom:var(--space-3);">🔍 ${escapeHTML(response.misconception.name)}</span>`;
+    }
     
     // Diagnosis
     if (response.diagnosis) {
@@ -530,13 +661,18 @@ async function renderBunjiAnswer(response, mode) {
     </div>`;
   }
   
-  // Add save as note button
+  // Add micro-feedback + save as note button
   html += `
-    <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-gray-200);">
+    <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-gray-200); display: flex; align-items: center; gap: var(--space-3);">
       <button class="btn-secondary btn-sm" id="saveFromBunji">
         <span>💾</span>
         Save as Note
       </button>
+      <div id="hintFeedback" style="margin-left: auto; display: flex; align-items: center; gap: var(--space-2);">
+        <span style="font-size: var(--font-size-xs); color: var(--color-gray-500);">Helpful?</span>
+        <button class="btn-icon hint-feedback-btn" id="hintThumbsUp" title="This hint helped" style="font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm);">👍</button>
+        <button class="btn-icon hint-feedback-btn" id="hintThumbsDown" title="This hint didn't help" style="font-size: 16px; padding: 2px 6px; border-radius: var(--radius-sm);">👎</button>
+      </div>
     </div>
   `;
   
@@ -546,6 +682,34 @@ async function renderBunjiAnswer(response, mode) {
   document.getElementById('saveFromBunji')?.addEventListener('click', () => {
     saveNoteFromBunji(response, currentContext);
   });
+
+  // Attach micro-feedback handlers — auto-dismiss after tap
+  const feedbackContainer = document.getElementById('hintFeedback');
+  const thumbsUp = document.getElementById('hintThumbsUp');
+  const thumbsDown = document.getElementById('hintThumbsDown');
+  const conceptForFeedback = lastConceptId;
+
+  function dismissFeedback(helpful) {
+    if (!feedbackContainer) return;
+    feedbackContainer.innerHTML = `<span style="font-size: var(--font-size-xs); color: var(--color-gray-400);">${helpful ? '✓ Noted!' : '✓ Got it'}</span>`;
+    setTimeout(() => { if (feedbackContainer) feedbackContainer.style.display = 'none'; }, 1500);
+    if (conceptForFeedback) {
+      bktEngine.init()
+        .then(() => bktEngine.updateMastery(conceptForFeedback, helpful))
+        .then(r => console.log(`[TrailNote] Micro-feedback BKT: ${conceptForFeedback} P(L)=${r.masteryAfter.toFixed(3)}`))
+        .catch(e => console.warn('[TrailNote] Micro-feedback BKT error:', e));
+    }
+  }
+
+  thumbsUp?.addEventListener('click', () => dismissFeedback(true));
+  thumbsDown?.addEventListener('click', () => dismissFeedback(false));
+
+  // Auto-dismiss after 8 seconds if not tapped
+  setTimeout(() => {
+    if (feedbackContainer && feedbackContainer.style.display !== 'none') {
+      feedbackContainer.style.display = 'none';
+    }
+  }, 8000);
 }
 
 // === Notes Integration ===
@@ -863,6 +1027,28 @@ async function exportNotes() {
   URL.revokeObjectURL(url);
 }
 
+// === Review Due Pill ===
+async function updateReviewDuePill() {
+  try {
+    const due = await learningVelocity.getConceptsDueForReview();
+    const pill = document.getElementById('reviewDuePill');
+    const countEl = document.getElementById('reviewDueCount');
+    if (!pill || !countEl) return;
+    if (due.length > 0) {
+      countEl.textContent = due.length;
+      pill.style.display = 'inline-flex';
+      pill.onclick = () => {
+        const kgNav = document.querySelector('.nav-item[data-view="knowledge-graph"]');
+        if (kgNav) kgNav.click();
+      };
+    } else {
+      pill.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('[TrailNote] Review pill update error:', e);
+  }
+}
+
 // === Struggle Detection ===
 async function initStruggleDetection() {
   // Check struggle level every 30 seconds
@@ -879,6 +1065,8 @@ function checkStruggleLevel() {
     // Show struggle banner in chat
     chat.showStruggleBanner(analysis);
   }
+
+  return analysis;
 }
 
 // === Context Management ===
@@ -1127,6 +1315,27 @@ chrome.runtime.onMessage.addListener((message) => {
         console.warn('[HintHopper] Failed to track test pass:', error);
       });
     }
+
+    // === BKT: Record correct outcome ===
+    if (lastConceptId) {
+      const conceptIdForBkt = lastConceptId;
+      const timeSpent = lastHintRequestTime ? (Date.now() - lastHintRequestTime) / 1000 / 60 : 0;
+      bktEngine.init().then(() => bktEngine.updateMastery(conceptIdForBkt, true)).then(result => {
+        console.log(`[TrailNote] BKT updated for ${conceptIdForBkt}: P(L) = ${result.masteryAfter.toFixed(3)}`);
+        if (result.isMastered) {
+          showNotification(`Concept mastered: ${conceptIdForBkt}`, 'success');
+        }
+      }).catch(e => console.warn('[TrailNote] BKT update error:', e));
+      learningVelocity.init().then(() =>
+        learningVelocity.trackVelocityProgress(conceptIdForBkt, timeSpent, true)
+      ).then(() => updateReviewDuePill())
+       .catch(e => console.warn('[TrailNote] Velocity track error:', e));
+    }
+
+    // Notify Intelligence Hub (handled inside outcome-tracker too, but belt-and-suspenders here)
+    intelligenceHub.onOutcome(message.hintId, 'passed', null, currentContext?.challengeId || null).catch(() => {});
+    // Refresh intelligence status after outcome
+    setTimeout(() => renderIntelligenceStatus(), 1500);
     
     // If we have A/B testing data, record the outcome
     if (message.abTesting && typeof window !== 'undefined') {
@@ -1154,6 +1363,101 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // Auto-refresh context every minute
 setInterval(requestContextRefresh, 60000);
+// Auto-refresh intelligence status every 5 minutes
+setInterval(renderIntelligenceStatus, 5 * 60 * 1000);
+
+// === Intelligence Hub UI ===
+async function renderIntelligenceStatus() {
+  if (!intelligenceHub.initialized) return;
+
+  try {
+    const status = await intelligenceHub.getSystemStatus();
+    const el = document.getElementById('intelligenceStatus');
+    if (!el) return;
+
+    const mastery = status.mastery;
+    const velocity = status.velocity;
+    const pendingCount = status.pendingApprovals;
+    const reviewsDue = status.reviewsDue;
+
+    let html = '';
+
+    if (mastery) {
+      const pct = Math.round((mastery.masteryRate || 0) * 100);
+      html += `<div class="intel-stat"><span class="intel-label">BKT Mastery</span><span class="intel-value">${pct}%</span></div>`;
+    }
+    if (velocity && velocity.overallVelocity) {
+      html += `<div class="intel-stat"><span class="intel-label">Velocity</span><span class="intel-value">${velocity.overallVelocity.toFixed(1)}/hr</span></div>`;
+    }
+    if (reviewsDue > 0) {
+      html += `<div class="intel-stat intel-alert"><span class="intel-label">Reviews Due</span><span class="intel-value">${reviewsDue}</span></div>`;
+    }
+    if (pendingCount > 0) {
+      html += `<div class="intel-stat intel-alert" style="cursor:pointer" id="showApprovalsBtn"><span class="intel-label">Memory Rules</span><span class="intel-value">${pendingCount} pending</span></div>`;
+    }
+
+    el.innerHTML = html || '<div class="intel-stat"><span class="intel-label">Intelligence</span><span class="intel-value">Active ✓</span></div>';
+
+    document.getElementById('showApprovalsBtn')?.addEventListener('click', showPendingApprovalsModal);
+  } catch (e) {
+    // non-critical
+  }
+}
+
+function showPendingApprovalsNotification(count) {
+  showNotification(`✨ ${count} new learning rule${count > 1 ? 's' : ''} detected — review in Memory panel`, 'info');
+}
+
+async function showPendingApprovalsModal() {
+  const approvals = intelligenceHub.getPendingApprovals();
+  if (approvals.length === 0) return;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:#fff;border-radius:12px;padding:24px;width:360px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+
+  inner.innerHTML = `
+    <h3 style="margin:0 0 16px;font-size:16px;">🧠 Learning Rule Suggestions</h3>
+    <p style="font-size:13px;color:#666;margin:0 0 16px;">TrailNote detected patterns in your learning. Approve to save as personal rules.</p>
+    ${approvals.map(a => `
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${escapeHTML(a.memory.key.replace(/_/g,' '))}</div>
+        <div style="font-size:12px;color:#555;margin-bottom:8px;">${escapeHTML(JSON.stringify(a.memory.value))}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px;">Confidence: ${Math.round((a.memory.confidence||0)*100)}%</div>
+        <div style="display:flex;gap:8px;">
+          <button class="approve-btn btn-primary" style="font-size:12px;padding:4px 12px;border:none;border-radius:6px;background:#7c3aed;color:#fff;cursor:pointer;" data-id="${escapeHTML(a.id)}">✓ Approve</button>
+          <button class="reject-btn" style="font-size:12px;padding:4px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;" data-id="${escapeHTML(a.id)}">✕ Reject</button>
+        </div>
+      </div>
+    `).join('')}
+    <button id="closeApprovalsModal" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;cursor:pointer;font-size:13px;">Close</button>
+  `;
+
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+
+  // Close
+  document.getElementById('closeApprovalsModal')?.addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  // Approve/reject handlers
+  inner.querySelectorAll('.approve-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await intelligenceHub.approveMemory(btn.dataset.id);
+      btn.closest('div[style]').innerHTML = '<div style="color:#16a34a;font-size:13px;">✓ Rule saved!</div>';
+      renderIntelligenceStatus();
+    });
+  });
+
+  inner.querySelectorAll('.reject-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await intelligenceHub.rejectMemory(btn.dataset.id);
+      btn.closest('div[style]').innerHTML = '<div style="color:#9ca3af;font-size:13px;">Rejected</div>';
+    });
+  });
+}
 
 // === Mastery View Integration ===
 async function initMasteryView() {
