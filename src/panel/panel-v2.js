@@ -1164,7 +1164,7 @@ function renderContext(ctx) {
   if (!ctx) {
     preview.innerHTML = `
       <div style="color: var(--color-gray-400); text-align: center; padding: var(--space-8);">
-        Navigate to a supported learning platform to get started
+        Open a lesson on a supported platform, then click into the editor or run the tests — TrailNote will pull the context automatically.
       </div>
     `;
     return;

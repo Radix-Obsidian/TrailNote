@@ -1,18 +1,20 @@
 # TrailNote
 
-AI Tutor + Smart Notes + Minimal Token Tracker for freeCodeCamp.
+Get unstuck faster. Learn deeper. Remember what you learned.
 
 ## Overview
 
-TrailNote is a Chrome extension that provides AI-powered tutoring assistance specifically for freeCodeCamp learners. It reads your current lesson context, offers hints (not answers), and helps you take smart notes with auto-tagging.
+TrailNote is a Chrome extension for learners who want to stop burning hours on “almost there” bugs.
+
+It reads your current lesson context and gives you context-aware hints (not full solutions), then helps you capture what mattered as smart, searchable notes so you don’t relearn the same lesson next week.
 
 ## Features
 
-- **AI Tutor**: Context-aware hints and nudges (no full solutions)
-- **Smart Notes**: Local note-taking with auto-tags based on lesson content
-- **Token Tracker**: Session and daily token usage tracking
-- **freeCodeCamp Integration**: Reads challenge titles, URLs, and failing tests
-- **Local-first**: All notes and settings stay on your device
+- **AI Tutor (hints, not answers)**: Get the next best step with your challenge + failing tests automatically included
+- **Smart Notes that resurface**: Save the “why it worked” with auto-tagging so it shows up when you need it again
+- **Token Tracker**: See session/daily usage so you can control spend and stay consistent
+- **Deep lesson context**: Pulls titles, URLs, tests, and code preview to keep help relevant
+- **Local-first by default**: Notes and settings stay on your device
 
 ## File Structure
 

@@ -62,7 +62,7 @@ export async function renderAgentGallery(container) {
       <div class="content-card">
         <div class="card-header">
           <h3 class="card-title">🚀 Quick Start</h3>
-          <span class="card-subtitle">Deploy in 2 minutes, no coding required</span>
+          <span class="card-subtitle">Pick a template and deploy in ~2 minutes (no setup headaches)</span>
         </div>
         <div class="card-body">
           <div class="agent-grid">
@@ -78,7 +78,7 @@ export async function renderAgentGallery(container) {
                   <span class="agent-difficulty difficulty-${template.difficulty}">${template.difficulty}</span>
                 </div>
                 <button class="btn-primary btn-block agent-deploy-btn" data-template-id="${template.id}">
-                  Deploy Now
+                  Deploy & Start Using
                 </button>
               </div>
             `).join('')}
@@ -119,7 +119,7 @@ export async function renderAgentGallery(container) {
             </div>
           ` : `
             <div class="empty-state">
-              <p>No custom agents yet. Deploy a Quick Start agent above, or create your own!</p>
+              <p>No custom agents yet. Deploy a Quick Start template to get value in minutes, or create a custom agent for your workflow.</p>
             </div>
           `}
         </div>
