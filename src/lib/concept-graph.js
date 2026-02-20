@@ -8,7 +8,8 @@ import { conceptIdFrom } from './utils.js';
 const CONCEPTS_STORE_KEY = 'concept_graph';
 const MASTERY_STORE_KEY = 'concept_mastery';
 
-// Core concept taxonomy - initial set of freeCodeCamp HTML/CSS concepts
+// Core concept taxonomy - initial set of HTML/CSS concepts (default/FCC)
+// Extended at runtime with platform-specific concepts via loadPlatformConcepts()
 const CORE_CONCEPTS = {
   // HTML Structure concepts
   'html-structure': {
@@ -572,6 +573,28 @@ export const conceptGraph = {
   // Alias for getGraph() — used by nlu.js, adaptive-learning.js, and other modules
   async getAllConcepts() {
     return await this.getGraph();
+  },
+
+  /**
+   * Load and merge platform-specific concepts into CORE_CONCEPTS
+   * @param {string} platformId - Platform identifier (e.g. 'udemy', 'leetcode')
+   */
+  async loadPlatformConcepts(platformId) {
+    if (!platformId || platformId === 'freecodecamp' || platformId === 'unknown') return;
+    try {
+      const { getConceptsForPlatform } = await import('./concepts/platform-concepts.js');
+      const platformConcepts = getConceptsForPlatform(platformId);
+      if (platformConcepts && Object.keys(platformConcepts).length > 0) {
+        for (const [id, concept] of Object.entries(platformConcepts)) {
+          if (!CORE_CONCEPTS[id]) {
+            CORE_CONCEPTS[id] = { ...concept, id };
+          }
+        }
+        console.log(`[TrailNote] Loaded ${Object.keys(platformConcepts).length} concepts for ${platformId}`);
+      }
+    } catch (e) {
+      console.warn('[TrailNote] Failed to load platform concepts (non-critical):', e);
+    }
   },
 
   // Get all related concepts (prerequisites and dependents)

@@ -1,294 +1,53 @@
 // Content script that sends context to panel via background
 // Handles SPA navigation with mutation observer
+// Uses platform adapters loaded from all-adapters.js for multi-platform support
 
-// Import context grabber - note: MV3 doesn't support ES modules in content scripts by default
-// For now, we inline or use a simple approach
 function grabContextFromDom() {
-  console.log('[HintHopper] === Starting context capture ===');
-  
-  // Try multiple title selectors
-  let title = null;
-  const titleSelectors = [
-    'h1',
-    '.title',
-    '.challenge-title',
-    '[class*="title"]',
-    '[data-test*="challenge-title"]',
-    '[class*="Challenge"]',
-    'h2'
-  ];
-  
-  for (const selector of titleSelectors) {
-    const el = document.querySelector(selector);
-    if (el && el.textContent && el.textContent.trim().length > 0) {
-      title = el.textContent.trim();
-      console.log(`[HintHopper] Title found via "${selector}": "${title}"`);
-      break;
-    }
-  }
-  
-  if (!title) {
-    title = document.title;
-    console.log(`[HintHopper] Title fallback to document.title: "${title}"`);
-  }
+  console.log('[TrailNote] === Starting context capture ===');
 
-  title = (title || '').trim();
-  if (!title) {
-    title = 'freeCodeCamp Challenge';
-    console.log('[HintHopper] Title fallback to default label');
-  }
-
-  // Try multiple test result selectors - focus on actual test results
-  const testSelectors = [
-    '[class*="test"]',
-    '[data-testid*="test"]',
-    'li[class*="fail"]',
-    'li[class*="error"]',
-    'li[class*="pass"]',
-    '[class*="console"]',
-    '[class*="output"]',
-    '[class*="test-output"]',
-    '[class*="test-result"]',
-    '[id*="test"]',
-    'pre',
-    'code[class*="test"]'
-  ];
-  
-  // Patterns to filter out placeholder/irrelevant text
-  const placeholderPatterns = [
-    /\/\*\*[\s\S]*?Your test output will go here[\s\S]*?\*\//i,
-    /\/\*\*[\s\S]*?test output[\s\S]*?\*\//i,
-    /^\/\**\s*$/,
-    /^[\s\*\/]*$/,
-    /^Your test output will go here$/i,
-    /^test output will go here$/i,
-    /^\s*\/\/\s*running tests\s*$/i,
-    /^\s*\/\/\s*tests completed\s*$/i,
-    /^\/\*\s*\*\/\s*$/,
-    /^\s*$/ // Empty or whitespace only
-  ];
-  
-  const testNodes = [];
-  for (const selector of testSelectors) {
-    const nodes = document.querySelectorAll(selector);
-    if (nodes.length > 0) {
-      console.log(`[HintHopper] Found ${nodes.length} elements via "${selector}"`);
-      testNodes.push(...Array.from(nodes));
-    }
-  }
-
-  // Also look for test text patterns in the entire document
-  // freeCodeCamp often shows test output in specific formats
-  const allText = document.body.innerText || '';
-  const testPatterns = [
-    /Test Failed[^\n]*/gi,
-    /There should be[^\n]*/gi,
-    /The \w+ should[^\n]*/gi,
-    /Your \w+ should[^\n]*/gi,
-    /Hint[^\n]*/gi,
-    /Sorry[^\n]*Keep trying[^\n]*/gi
-  ];
-  
-  testPatterns.forEach(pattern => {
-    const matches = allText.match(pattern);
-    if (matches) {
-      matches.forEach(match => {
-        const trimmed = match.trim();
-        if (trimmed.length > 10 && trimmed.length < 500) {
-          testNodes.push({ textContent: trimmed });
-        }
+  // Use platform adapter system if available
+  if (window.__trailNoteAdapters) {
+    const ctx = window.__trailNoteAdapters.buildContext();
+    if (ctx) {
+      console.log(`[TrailNote] Context captured via ${ctx.platformDisplayName} adapter:`, {
+        title: ctx.title, tests: ctx.tests?.length, codeLen: ctx.userCode?.length, lang: ctx.codeLanguage
       });
+      return ctx;
     }
-  });
-
-  // Filter out placeholder text and keep all valid tests
-  const tests = testNodes
-    .map(n => n.textContent.trim())
-    .filter(test => {
-      // Remove empty strings
-      if (!test || test.length < 3) return false;
-      
-      // Filter out placeholder patterns
-      const isPlaceholder = placeholderPatterns.some(pattern => pattern.test(test));
-      if (isPlaceholder) {
-        console.log(`[HintHopper] Filtered out placeholder: "${test.substring(0, 50)}..."`);
-        return false;
-      }
-      
-      // Keep tests that look like actual test output
-      // Updated pattern to also catch freeCodeCamp's instruction patterns
-      const looksLikeTest = /test|fail|error|should|hint|sorry|expected|wrap|add|create|element|attribute/i.test(test) || 
-                            test.length > 20;
-      
-      return looksLikeTest;
-    });
-  
-  // Remove duplicates
-  const uniqueTests = [...new Set(tests)];
-  
-  // Look for specific rule patterns in the document if no tests were found
-  if (uniqueTests.length === 0 && document.body) {
-    const docText = document.body.innerText || '';
-    const rulesApi = (typeof window !== 'undefined' && window.trailNoteRules) ? window.trailNoteRules : null;
-    const ruleHint = rulesApi?.ruleHintsFromDom ? rulesApi.ruleHintsFromDom() : '';
-    
-    if (ruleHint) {
-      console.log(`[HintHopper] Found rule hint: "${ruleHint}"`);
-      // If we have a rule hint but no tests, create a synthetic test from the hint
-      uniqueTests.push(ruleHint);
-    }
+    console.warn('[TrailNote] Platform detected but adapter returned null context');
   }
-  
-  console.log(`[HintHopper] Tests captured (after filtering): ${uniqueTests.length}`, uniqueTests);
 
-  // Capture user's code from editor
+  // Fallback: generic context extraction for unsupported platforms
+  console.log('[TrailNote] No platform adapter matched — using generic fallback');
+  const title = document.querySelector('h1')?.textContent?.trim() || document.title || 'Unknown Page';
   let userCode = '';
-  let captureMethod = 'none';
-  
-  // Try multiple approaches to find the editor content
-  // 1. Monaco editor API (most reliable)
-  if (!userCode && window.monaco) {
-    try {
-      const editors = window.monaco.editor.getEditors();
-      if (editors && editors.length > 0) {
-        userCode = editors[0].getValue() || '';
-        captureMethod = 'monaco-api';
-      }
-    } catch (e) {
-      console.log('[HintHopper] Monaco API error:', e);
-    }
+  if (window.monaco) {
+    try { userCode = window.monaco.editor.getEditors()[0]?.getValue() || ''; } catch (_) {}
   }
-  
-  // 2. Check iframes for Monaco editor (freeCodeCamp may use iframes)
   if (!userCode) {
-    try {
-      const iframes = document.querySelectorAll('iframe');
-      for (const iframe of iframes) {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (iframeDoc) {
-            const iframeMonaco = iframeDoc.querySelector('.monaco-editor textarea');
-            if (iframeMonaco && iframeMonaco.value) {
-              userCode = iframeMonaco.value;
-              captureMethod = 'iframe-textarea';
-              break;
-            }
-            
-            // Try Monaco API in iframe
-            if (iframe.contentWindow?.monaco) {
-              const editors = iframe.contentWindow.monaco.editor.getEditors();
-              if (editors && editors.length > 0) {
-                userCode = editors[0].getValue() || '';
-                captureMethod = 'iframe-monaco-api';
-                break;
-              }
-            }
-          }
-        } catch (e) {
-          // Cross-origin iframe, skip
-        }
-      }
-    } catch (e) {
-      console.log('[HintHopper] Iframe check error:', e);
-    }
-  }
-  
-  // 3. Monaco editor textarea (most common)
-  if (!userCode) {
-    const monacoTextarea = document.querySelector('.monaco-editor textarea, textarea.inputarea');
-    if (monacoTextarea) {
-      userCode = monacoTextarea.value || '';
-      captureMethod = 'monaco-textarea';
-    }
-  }
-  
-  // 4. freeCodeCamp-specific selectors
-  if (!userCode) {
-    const fccSelectors = [
-      '#editor textarea',
-      '[data-cy="editor"] textarea',
-      '.editor-container textarea',
-      '.code-editor textarea',
-      'div[role="code"] textarea',
-      '[class*="Editor"] textarea'
-    ];
-    
-    for (const selector of fccSelectors) {
-      const textarea = document.querySelector(selector);
-      if (textarea && textarea.value) {
-        userCode = textarea.value;
-        captureMethod = `fcc-${selector}`;
-        break;
-      }
-    }
-  }
-  
-  // 5. Direct textarea selectors (fallback)
-  if (!userCode) {
-    const editorTextarea = document.querySelector('textarea[class*="input"], textarea[class*="editor"]');
-    if (editorTextarea) {
-      userCode = editorTextarea.value || '';
-      captureMethod = 'generic-textarea';
-    }
-  }
-  
-  // 6. Code editor container (monaco editor visible content - less reliable)
-  if (!userCode) {
-    const editorContainer = document.querySelector(
-      '.monaco-editor .view-lines, [class*="monaco-editor"], [class*="code-editor"], [data-cy="code-editor"]'
-    );
-    if (editorContainer) {
-      // Try to get text from view-lines (Monaco's visible lines)
-      const viewLines = editorContainer.querySelectorAll('.view-line');
-      if (viewLines.length > 0) {
-        const lines = Array.from(viewLines).map(line => {
-          // Get text content, removing line numbers and decorations
-          return line.textContent || '';
-        });
-        userCode = lines.join('\n');
-        captureMethod = 'monaco-view-lines';
-      }
-    }
+    const ta = document.querySelector('textarea[class*="editor"], textarea[class*="code"]');
+    if (ta) userCode = ta.value || '';
   }
 
-  console.log(`[HintHopper] Code capture - Method: ${captureMethod}, Code length: ${userCode.length}`);
-  if (userCode.length > 0) {
-    console.log(`[HintHopper] Code preview: ${userCode.substring(0, 100)}...`);
-  }
-  
-  const rulesApi = (typeof window !== 'undefined' && window.trailNoteRules) ? window.trailNoteRules : null;
-  const instruction = rulesApi?.instructionFromDom ? rulesApi.instructionFromDom() : '';
-  const ruleHints = rulesApi?.ruleHintsFromDom ? rulesApi.ruleHintsFromDom() : '';
-  const codeExcerpt = rulesApi?.codeExcerptFromText ? rulesApi.codeExcerptFromText(userCode) : (userCode || '').slice(0, 400);
-  
-  // If we got rule hints but no tests, make the rule hint a synthetic test
-  if (uniqueTests.length === 0 && ruleHints) {
-    console.log(`[HintHopper] Adding rule hint as synthetic test: "${ruleHints}"`);
-    uniqueTests.push(ruleHints);
-  }
-
-  const url = location.pathname;
-  const context = {
+  return {
+    platform: 'unknown',
+    platformDisplayName: 'Unknown Platform',
+    platformIcon: '📚',
+    contentType: 'mixed',
     title,
-    url,
-    tests: uniqueTests, // Use deduplicated tests
+    url: location.pathname,
+    fullUrl: location.href,
+    tests: [],
+    failingTests: [],
     userCode: userCode.trim(),
-    instruction,
-    ruleHints,
-    code_excerpt: codeExcerpt
+    codeLanguage: 'javascript',
+    codeCaptureMethod: 'generic-fallback',
+    instruction: '',
+    ruleHints: '',
+    conceptId: null,
+    code_excerpt: userCode.slice(0, 400),
+    systemPromptAddition: ''
   };
-  
-  console.log('[HintHopper] === Final context object ===');
-  console.log('[HintHopper] Title:', context.title);
-  console.log('[HintHopper] URL:', context.url);
-  console.log('[HintHopper] Code length:', context.userCode.length);
-  console.log('[HintHopper] Tests count:', context.tests.length);
-  console.log('[HintHopper] Instruction length:', (instruction||'').length);
-  console.log('[HintHopper] Rule hints:', ruleHints);
-  console.log('[HintHopper] Full context:', context);
-  console.log('[HintHopper] ==============================');
-  
-  return context;
 }
 
 // send context update to background

@@ -68,7 +68,8 @@ const GROQ_MODELS = new Set([
 const IGNORABLE_RUNTIME_ERRORS = /(Extension context invalidated|Receiving end does not exist)/i;
 
 const SYS_BASE = `
-You are Bunji, an energetic and friendly coding tutor for HintHopper, helping freeCodeCamp beginners "hop to the right idea".
+You are Bunji, an energetic and friendly coding tutor for TrailNote, helping learners "hop to the right idea".
+{PLATFORM_CONTEXT}
 Rules:
 - Hints, not solutions. Never output full task code.
 - Keep responses short and structured.
@@ -126,9 +127,11 @@ async function sanitizeStructuredResponse(obj, strict, context) {
   return clone;
 }
 
-function buildSystemPrompt(tone, bktDirective = '', misconceptionHint = '') {
+function buildSystemPrompt(tone, bktDirective, misconceptionHint, platformAddition) {
   const toneKey = MODE_TONE[tone] ? tone : "nudge";
-  let prompt = `${SYS_BASE}\nTone: ${MODE_TONE[toneKey]}`;
+  const platformCtx = platformAddition || 'The learner is studying on an online coding platform.';
+  let prompt = SYS_BASE.replace('{PLATFORM_CONTEXT}', platformCtx);
+  prompt += `\nTone: ${MODE_TONE[toneKey]}`;
   if (bktDirective) prompt += `\n${bktDirective}`;
   if (misconceptionHint) prompt += `\n${misconceptionHint}`;
   return prompt;
@@ -480,7 +483,7 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
       }
     }
   }
-  if (!context) throw new Error("Context Preview is empty. Open a freeCodeCamp challenge, then wait a moment before asking again.");
+  if (!context) throw new Error("Context Preview is empty. Open a challenge on a supported platform, then wait a moment before asking again.");
 
   console.log('[HintHopper Bunji] Received context:', context);
 
@@ -492,13 +495,13 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
   const hasAnyMeaningfulData = Boolean(title || url || hasCode || hasTests);
 
   if (!hasAnyMeaningfulData) {
-    throw new Error("I still can't read the challenge. Check the Context Preview tab—if it's blank, focus the freeCodeCamp editor or run the tests, then try again.");
+    throw new Error("I still can't read the challenge. Check the Context Preview tab—if it's blank, focus the code editor or run the tests, then try again.");
   }
 
   if (!hasCode) console.warn('[HintHopper Bunji] No code captured - will work with tests only');
   if (!hasTests) console.warn('[HintHopper Bunji] No tests captured - will work with code only');
   if (!hasCode && !hasTests && !hasChallengeUrl) {
-    throw new Error("Couldn't find code or tests for this page. Open a freeCodeCamp challenge and make sure Context Preview shows details before asking again.");
+    throw new Error("Couldn't find code or tests for this page. Open a challenge on a supported platform and make sure Context Preview shows details before asking again.");
   }
 
   const toneSetting = MODE_TONE[tone] ? tone : 'nudge';
@@ -660,13 +663,15 @@ export async function tutorAnswer(mode, context, tone = "nudge") {
       makeUserPrompt(mode, context, ruleHints, toneSetting);
     
     // Use the variant's system prompt if available
+    const platformPrompt = context.systemPromptAddition || '';
     systemPromptContent = abVariant.systemPrompt ?
-      `${SYS_BASE}\nTone: ${MODE_TONE[toneSetting]}\n${abVariant.systemPrompt}` :
-      buildSystemPrompt(toneSetting, bktDirective, misconceptionHint);
+      `${SYS_BASE.replace('{PLATFORM_CONTEXT}', platformPrompt || 'The learner is studying on an online coding platform.')}\nTone: ${MODE_TONE[toneSetting]}\n${abVariant.systemPrompt}` :
+      buildSystemPrompt(toneSetting, bktDirective, misconceptionHint, platformPrompt);
   } else {
     // Use standard prompts
+    const platformPrompt = context.systemPromptAddition || '';
     userPrompt = makeUserPrompt(mode, context, ruleHints, toneSetting);
-    systemPromptContent = buildSystemPrompt(toneSetting, bktDirective, misconceptionHint);
+    systemPromptContent = buildSystemPrompt(toneSetting, bktDirective, misconceptionHint, platformPrompt);
   }
   
   const messages = [

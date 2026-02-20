@@ -82,6 +82,68 @@ const MISCONCEPTION_TYPES = {
     relatedConcepts: ['html-semantics', 'accessibility']
   },
   
+  // JavaScript misconceptions (Udemy, Codecademy, Scrimba)
+  JS_SCOPE_CLOSURE: {
+    id: 'js_scope_closure',
+    name: 'Scope & Closure Confusion',
+    description: 'Not understanding variable scoping or closures',
+    indicators: ['reference_error', 'undefined_variable', 'stale_closure'],
+    relatedConcepts: ['js-basics', 'js-functions', 'cc-js-intro']
+  },
+  JS_ASYNC_FLOW: {
+    id: 'js_async_flow',
+    name: 'Async Flow Misunderstanding',
+    description: 'Expecting synchronous behavior from async operations',
+    indicators: ['promise_unhandled', 'callback_timing', 'race_condition'],
+    relatedConcepts: ['js-async', 'web-javascript']
+  },
+  JS_TYPE_COERCION: {
+    id: 'js_type_coercion',
+    name: 'Type Coercion Error',
+    description: 'Unexpected results from implicit type conversion',
+    indicators: ['equality_confusion', 'nan_result', 'string_concat'],
+    relatedConcepts: ['js-basics', 'cc-js-intro']
+  },
+
+  // Python misconceptions (Udemy, Codecademy, Coursera)
+  PY_INDENTATION: {
+    id: 'py_indentation',
+    name: 'Python Indentation Error',
+    description: 'Incorrect indentation causing syntax or logic errors',
+    indicators: ['indent_error', 'unexpected_indent', 'wrong_block'],
+    relatedConcepts: ['python-basics', 'cc-python-intro']
+  },
+  PY_MUTABILITY: {
+    id: 'py_mutability',
+    name: 'Mutability Confusion',
+    description: 'Not understanding mutable vs immutable types',
+    indicators: ['list_aliasing', 'default_mutable_arg', 'unexpected_mutation'],
+    relatedConcepts: ['python-basics', 'cc-python-intermediate']
+  },
+
+  // Algorithm misconceptions (LeetCode, HackerRank)
+  ALGO_COMPLEXITY: {
+    id: 'algo_complexity',
+    name: 'Time/Space Complexity Error',
+    description: 'Solution exceeds time or space limits',
+    indicators: ['tle', 'mle', 'brute_force', 'nested_loops'],
+    relatedConcepts: ['lc-dynamic-programming', 'lc-arrays-strings']
+  },
+  ALGO_EDGE_CASE: {
+    id: 'algo_edge_case',
+    name: 'Missing Edge Case',
+    description: 'Solution fails on boundary or special inputs',
+    indicators: ['empty_input', 'single_element', 'overflow', 'negative'],
+    relatedConcepts: ['lc-arrays-strings', 'lc-binary-search']
+  },
+  ALGO_DATA_STRUCTURE: {
+    id: 'algo_data_structure',
+    name: 'Wrong Data Structure Choice',
+    description: 'Using suboptimal data structure for the problem',
+    indicators: ['linear_lookup', 'missing_set', 'wrong_container'],
+    relatedConcepts: ['lc-hash-maps', 'lc-stacks-queues', 'lc-trees']
+  },
+
   // Default fallback
   UNKNOWN: {
     id: 'unknown',

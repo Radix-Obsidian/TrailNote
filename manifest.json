@@ -16,6 +16,13 @@
   ],
   "host_permissions": [
     "https://www.freecodecamp.org/*",
+    "https://*.udemy.com/*",
+    "https://www.codecademy.com/*",
+    "https://scrimba.com/*",
+    "https://www.coursera.org/*",
+    "https://www.khanacademy.org/*",
+    "https://leetcode.com/*",
+    "https://www.hackerrank.com/*",
     "https://api.openai.com/*",
     "https://api.groq.com/*",
     "http://localhost/*",
@@ -26,8 +33,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.freecodecamp.org/*"],
-      "js": ["src/lib/rules.js", "src/content.js"],
+      "matches": [
+        "https://www.freecodecamp.org/*",
+        "https://*.udemy.com/*",
+        "https://www.codecademy.com/*",
+        "https://scrimba.com/*",
+        "https://www.coursera.org/*",
+        "https://www.khanacademy.org/*",
+        "https://leetcode.com/*",
+        "https://www.hackerrank.com/*"
+      ],
+      "js": ["src/lib/rules.js", "src/lib/platforms/all-adapters.js", "src/content.js"],
       "run_at": "document_idle"
     }
   ],

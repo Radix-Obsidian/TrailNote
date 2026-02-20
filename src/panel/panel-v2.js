@@ -455,7 +455,7 @@ async function handleBunjiAction(mode) {
   
   if (!currentContext) {
     console.warn('[HintHopper] No context available for Bunji action')
-    showNotification('Please navigate to a freeCodeCamp challenge first.', 'warning');
+    showNotification('Please navigate to a supported learning platform first.', 'warning');
     return;
   }
 
@@ -791,7 +791,7 @@ async function initNotes() {
     
     const note = {
       id: crypto.randomUUID(),
-      title: currentContext?.title || 'freeCodeCamp',
+      title: currentContext?.title || (currentContext?.platformDisplayName || 'Learning Platform'),
       url: currentContext?.url || location.href,
       createdAt: Date.now(),
       body: body,
@@ -1088,9 +1088,11 @@ function requestContextRefresh() {
     const url = tab.url || '';
     console.log('[HintHopper] Active tab URL:', url);
     
-    const isFCC = /https?:\/\/(www\.)?freecodecamp\.org\//i.test(url);
-    if (!isFCC) {
-      showNoContextHelp('Open a freeCodeCamp challenge to enable context.');
+    // Check if the URL matches any supported platform
+    const SUPPORTED_DOMAINS = ['freecodecamp.org', 'udemy.com', 'codecademy.com', 'scrimba.com', 'coursera.org', 'khanacademy.org', 'leetcode.com', 'hackerrank.com'];
+    const isSupportedPlatform = SUPPORTED_DOMAINS.some(d => url.includes(d));
+    if (!isSupportedPlatform) {
+      showNoContextHelp('Open a supported learning platform to enable context (freeCodeCamp, Udemy, Codecademy, LeetCode, etc.).');
       return;
     }
 
@@ -1148,6 +1150,13 @@ function renderContext(ctx) {
   if (ctx) {
     struggleDetector.trackAction('context_change', ctx);
     if (chat) chat.updateContext(ctx);
+
+    // Load platform-specific concepts if needed
+    if (ctx.platform && ctx.platform !== 'unknown') {
+      import('../lib/concept-graph.js').then(mod => {
+        mod.default.loadPlatformConcepts(ctx.platform);
+      }).catch(() => {});
+    }
   }
   
   const preview = document.getElementById('contextPreview');
@@ -1155,13 +1164,19 @@ function renderContext(ctx) {
   if (!ctx) {
     preview.innerHTML = `
       <div style="color: var(--color-gray-400); text-align: center; padding: var(--space-8);">
-        Navigate to a freeCodeCamp challenge to get started
+        Navigate to a supported learning platform to get started
       </div>
     `;
     return;
   }
   
   let html = '';
+
+  // Show platform badge if available
+  if (ctx.platform && ctx.platform !== 'unknown') {
+    html += `<div style="margin-bottom: var(--space-2);"><span class="badge badge-info" style="font-size: 11px;">${ctx.platformIcon || '📚'} ${escapeHTML(ctx.platformDisplayName || ctx.platform)}</span></div>`;
+  }
+
   if (ctx.title) html += `<div style="font-weight: 600; margin-bottom: var(--space-2);">📝 ${escapeHTML(ctx.title)}</div>`;
   
   // Handle URL
@@ -1209,7 +1224,12 @@ function showNoContextHelp(msg) {
   preview.innerHTML = `
     <div style="text-align:center; color: var(--color-gray-600); padding: var(--space-8);">
       <div style="margin-bottom: var(--space-2);">${escapeHTML(msg)}</div>
-      <div><a href="https://www.freecodecamp.org/learn/" target="_blank" style="color: var(--color-primary-600); text-decoration: none;">Open freeCodeCamp</a></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:var(--space-2);">
+        <a href="https://www.freecodecamp.org/learn/" target="_blank" style="color: var(--color-primary-600); text-decoration: none; font-size: var(--font-size-sm);">🔥 freeCodeCamp</a>
+        <a href="https://www.udemy.com/" target="_blank" style="color: var(--color-primary-600); text-decoration: none; font-size: var(--font-size-sm);">🎓 Udemy</a>
+        <a href="https://www.codecademy.com/" target="_blank" style="color: var(--color-primary-600); text-decoration: none; font-size: var(--font-size-sm);">💻 Codecademy</a>
+        <a href="https://leetcode.com/" target="_blank" style="color: var(--color-primary-600); text-decoration: none; font-size: var(--font-size-sm);">🧩 LeetCode</a>
+      </div>
       <div style="margin-top: var(--space-2);">
         <button class="btn-secondary btn-sm" id="refreshContextBtn">Refresh context</button>
       </div>
